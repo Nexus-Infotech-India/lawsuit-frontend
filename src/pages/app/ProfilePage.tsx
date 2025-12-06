@@ -5,6 +5,7 @@ import { casesApi, usersApi, authApi } from '@/services/api'
 import storage from '@/utils/storage'
 import { useUserStore } from '@/stores/userStore'
 import Button from '@/components/atoms/Button'
+import ClientInfo from '@/components/molecules/ClientInfo'
 
 const ProfilePage: FC = () => {
   const navigate = useNavigate()
@@ -243,7 +244,17 @@ const ProfilePage: FC = () => {
           </div>
         </div>
       </div>
-      <div className="bg-white rounded-b-lg p-8 gap-8 "> <hr className='mx-12'/></div>
+      {/* additional info */}
+      <section>
+        <div className="bg-white rounded-b-lg p-8 gap-8 "> 
+          <hr className='mx-12'/>
+          <div className="mt-6">
+            <h1 className=" flex justify-center text-lg font-semibold text-midnight mb-2">Additional Information</h1>
+            <ClientInfo />
+          </div>
+        </div>
+      </section>
+      
     </div>
   )
 }

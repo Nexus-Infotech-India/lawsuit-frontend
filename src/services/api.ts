@@ -202,6 +202,12 @@ export const usersApi = {
   updateMe: (payload: { name?: string; phone?: string; avatarUrl?: string }) => api.put('/users/me', payload),
   getPresignedUrl: (userId: string, params?: { fileName?: string; mimeType?: string; size?: number }) =>
     api.get(`/cases/${userId}/getpresignedUrl`, { params }),
+  // Client information (read & update)
+  getClientInformation: () => api.get('/users/client-information'),
+  postClientInformation: (payload: any) => api.post('/users/client-information', payload),
+  // Lawyer information (read & update)
+  getLawyerInformation: () => api.get('/users/lawyer-information'),
+  postLawyerInformation: (payload: any) => api.post('/users/lawyer-information', payload),
 }
 
 export const chatApi = {

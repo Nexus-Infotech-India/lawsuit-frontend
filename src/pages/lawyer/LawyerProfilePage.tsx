@@ -7,6 +7,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { useUserStore } from '@/stores/userStore'
 import { usersApi } from '@/services/api'
 import Button from '@/components/atoms/Button'
+import LawyerInfo from '@/components/molecules/LawyerInfo'
 
 const LawyerProfilePage: FC = () => {
   const navigate = useNavigate()
@@ -253,7 +254,16 @@ const LawyerProfilePage: FC = () => {
           </div>
         </div>
       </div>
-      
+      {/* additional info */}
+      <section>
+        <div className="bg-white rounded-b-lg p-8 gap-8 "> 
+          <hr className='mx-12'/>
+          <div className="mt-6">
+            <h1 className=" flex justify-center text-lg font-semibold text-midnight mb-2">Additional Information</h1>
+            <LawyerInfo />
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
