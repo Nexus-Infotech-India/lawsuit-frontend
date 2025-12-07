@@ -1,4 +1,7 @@
-import { FC } from 'react'
+import { FC, useState } from 'react'
+import Modal from './Modal'
+import UploadInput from './UploadButton'
+import { appointmentsApi } from '@/services/api'
 
 interface Props {
   id: string
@@ -18,6 +21,21 @@ interface Props {
 const AppointmentItem: FC<Props> = ({ id, lawyerName, clientName, datetime, status, onAttend, onCancel, onReschedule, onConnect, onAgreement, onDiscussion, onCaseDetails }) => {
   const displayName = clientName ?? lawyerName ?? `Lawyer ${id}`
   const s = (status || '').toUpperCase()
+  const [open, setOpen] = useState(false)
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+
+  const handleSubmit = () => {
+    if (!imageUrl) {
+        alert("Please upload an agreement file before submitting.");
+        return;
+    };
+    appointmentsApi.updateAgreementUrl({
+        body: {
+            appointmentId: id,
+            agreementUrl: imageUrl,
+        }
+    })
+  }
 
   return (
     <div className="p-4 bg-white rounded-lg shadow-sm border border-gray-100">
@@ -34,6 +52,18 @@ const AppointmentItem: FC<Props> = ({ id, lawyerName, clientName, datetime, stat
         </div>
       </div>
 
+      <Modal open={open}>
+        <div className='min-w-[300px]'>
+            <button
+            onClick={() => {
+                setOpen(false)
+            }}
+            >cancel</button>
+          <UploadInput imageUrl={imageUrl} setImageUrl={setImageUrl} />
+          <button onClick={handleSubmit}>submit</button>
+        </div>
+    </Modal>
+
       {/* Horizontal Line */}
       <hr className="border-gray-200 mb-3" />
 
@@ -49,7 +79,7 @@ const AppointmentItem: FC<Props> = ({ id, lawyerName, clientName, datetime, stat
 
         {s === 'COMPLETED' && (
           <div className="flex gap-6 text-sm justify-around">
-            <button onClick={onAgreement} className="text-pink-600 font-medium hover:underline">Agreement</button>
+            <button onClick={() => {setOpen(true)}} className="text-pink-600 font-medium hover:underline">Agreement</button>
             <button onClick={onDiscussion} className="text-blue-400 font-medium hover:underline">Discussion</button>
             <button onClick={onCaseDetails} className="text-green-500 font-medium hover:underline">Case Details</button>
           </div>
