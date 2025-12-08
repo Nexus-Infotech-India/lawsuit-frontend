@@ -117,7 +117,6 @@ const UploadInput = ({
     <div className={`relative ${width == 'auto' ? 'auto' : width == 'fixed' ? 'md:w-[150px] lg:w-[300px]' : 'w-full'}`}>
       <input
         type="file"
-        accept="image/*,video/*"
         className="hidden"
         id="fileInput"
         onChange={handleFileChange}
@@ -136,7 +135,7 @@ const UploadInput = ({
           <p className="mb-1 text-sm font-medium text-gray-700">
             <span className="text-primary">Click to upload</span> or drag and drop
           </p>
-          <p className="text-xs text-gray-500">Images or videos (Max 10MB)</p>
+          <p className="text-xs text-gray-500">Any file type accepted (Max 10MB)</p>
         </label>
       )}
 

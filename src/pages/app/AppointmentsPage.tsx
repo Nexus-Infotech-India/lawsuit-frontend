@@ -71,6 +71,8 @@ const AppointmentsPage: FC = () => {
       attended: appointments.filter(apt => apt.status === 'COMPLETED'),
       cancelled: appointments.filter(apt => apt.status === 'CANCELLED')
     }
+  }, [appointments])
+
   const handleViewAgreement = (aggrementUrl: string | null) => {
     if (aggrementUrl) {
       setSelectedAgreementUrl(aggrementUrl)
@@ -81,8 +83,6 @@ const AppointmentsPage: FC = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setSelectedAgreementUrl(null)
-  }   window.open(aggrementUrl, '_blank')
-    }
   }
 
   const handleDiscuss = (appointmentId: string) => {
@@ -271,6 +271,12 @@ const AppointmentsPage: FC = () => {
             <div className="text-center py-12">
               <p className="text-secondary">No {activeTab} appointments</p>
             </div>
+          ) : (
+            <div>
+              {categorizedAppointments[activeTab].map(appointment => 
+                renderAppointmentCard(appointment)
+              )}
+            </div>
           )}
         </div>
 
@@ -282,12 +288,6 @@ const AppointmentsPage: FC = () => {
             onClose={handleCloseModal}
           />
         )}
-      </div>
-    </div>
-  )
-}
-
-export default AppointmentsPage
       </div>
     </div>
   )
