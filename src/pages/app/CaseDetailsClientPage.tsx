@@ -132,7 +132,7 @@ export default function CaseDetailsClientPage() {
     };
 
     return (
-        <div className="flex h-screen bg-gray-50">
+        <div className="flex h-[calc(100vh-130px)] bg-gray-50">
             {/* Sidebar */}
             <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
                 {/* Lawyer Info Section */}
@@ -202,7 +202,7 @@ export default function CaseDetailsClientPage() {
                 </nav>
 
                 {/* Case Status Footer */}
-                <div className="p-4 border-t border-gray-200 bg-gray-50">
+                <div className="p-4 border-t ">
                     <div className="flex items-center justify-between text-sm">
                         <span className="text-gray-600 font-medium">Status:</span>
                         <span className={`
