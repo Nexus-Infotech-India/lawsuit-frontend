@@ -255,6 +255,8 @@ export const apiEndpoints = {
     acceptCase: (id: string) => `${baseURL}/cases/accept/case/${id}`,
     getAllCases: `${baseURL}/cases/getall/cases`,
     getCaseDetails: (caseid: string) => `${baseURL}/cases/get/details/${caseid}`,
+    addTimeLine: (caseid: string) => `${baseURL}/cases/add/timeline/event/${caseid}`,
+    getTimeLineEvents: (caseid: string) => `${baseURL}/cases/timeline/events/${caseid}`,
   }
 }
 

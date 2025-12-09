@@ -42,4 +42,14 @@ export const addHearingSchema = z.object({
   body: z.object({ date: z.string().refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' }), court: z.string().optional(), judge: z.string().optional(), purpose: z.string().optional(), notes: z.string().optional() }),
 });
 
-export default { createCaseSchema, updateCaseSchema, addDocumentSchema, addTimelineSchema, addHearingSchema };
+
+export const createTimelineEventSchema = z.object({
+  title: z.string().min(1),
+  description: z.string().optional(),
+  eventDate: z.string().refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' }),
+  type: z.string(),
+})
+
+export type CreateTimelineEventSchema = z.infer<typeof createTimelineEventSchema>;
+
+export default { createCaseSchema, updateCaseSchema, addDocumentSchema, addTimelineSchema, addHearingSchema, createTimelineEventSchema };
