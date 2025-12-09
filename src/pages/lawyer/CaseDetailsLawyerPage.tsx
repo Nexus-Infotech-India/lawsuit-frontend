@@ -21,6 +21,7 @@ import ChatTab from "@/components/atoms/ChatTab";
 import DocumentsTab from "@/components/atoms/DocumentsTab";
 import TasksTab from "@/components/atoms/TasksTab";
 import CaseTimelineLawyer from "@/components/atoms/lawyer/CaseTimelineLawyer";
+import CaseHearingsLawyer from "@/components/atoms/lawyer/CaseHearingsLawyer";
 
 interface getCaseDetailsResponse {
     data: {
@@ -120,7 +121,7 @@ export default function CaseDetailsClientPage() {
             case 'timeline':
                 return <CaseTimelineLawyer caseId={caseData.id} />;
             case 'hearings':
-                return <CaseHearings caseId={caseData.id} />;
+                return <CaseHearingsLawyer caseId={caseData.id} />;
             case 'chat':
                 return <ChatTab caseId={caseData.id} />;
             case 'documents':

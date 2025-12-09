@@ -38,10 +38,10 @@ export const addTimelineSchema = z.object({
 });
 
 export const addHearingSchema = z.object({
-  params: z.object({ id: z.string().min(1) }),
   body: z.object({ date: z.string().refine((s) => !Number.isNaN(Date.parse(s)), { message: 'Invalid date' }), court: z.string().optional(), judge: z.string().optional(), purpose: z.string().optional(), notes: z.string().optional() }),
 });
 
+export type AddHearingSchema = z.infer<typeof addHearingSchema>;
 
 export const createTimelineEventSchema = z.object({
   title: z.string().min(1),
