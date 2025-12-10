@@ -53,7 +53,7 @@ const ClientInfo: React.FC = () => {
       try {
         const res = await usersApi.getClientInformation()
         const data = (res as any).data ?? res
-        const payload = data.data ?? data ?? {}
+        const payload = data.client ?? data ?? {}
         setInitial(payload)
         setForm(payload)
       } catch (err) {
@@ -128,7 +128,7 @@ const ClientInfo: React.FC = () => {
       // refresh
       const res = await usersApi.getClientInformation()
       const data = (res as any).data ?? res
-      const payload2 = data.data ?? data ?? {}
+      const payload2 = data.client ?? data ?? {}
       setInitial(payload2)
       setForm(payload2)
       setEditing(false)
