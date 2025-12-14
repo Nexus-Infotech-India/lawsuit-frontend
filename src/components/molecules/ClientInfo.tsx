@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react'
 import { usersApi } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
+import { 
+  MapPin, 
+  User, 
+  FileText, 
+  Edit3, 
+  X, 
+  Save,
+  Loader2,
+  ExternalLink,
+  Calendar,
+  Wallet
+} from 'lucide-react'
 
 type Gender = 'MALE' | 'FEMALE' | 'OTHER' | 'PREFER_NOT_TO_SAY'
 type Caste = 'GENERAL' | 'OBC' | 'SC' | 'ST' | 'EWS' | 'OTHER'
@@ -34,6 +46,12 @@ interface ClientInfoShape {
   casteProofUrl?: string
 }
 
+const normalizeResponse = (data: any): ClientInfoShape => {
+  const raw = data?.data ?? data ?? {}
+  const payload = raw.client ?? raw
+  return { ...payload }
+}
+
 const ClientInfo: React.FC = () => {
   const authUser = useAuthStore((s) => s.user)
   const userId = authUser?.id
@@ -53,9 +71,9 @@ const ClientInfo: React.FC = () => {
       try {
         const res = await usersApi.getClientInformation()
         const data = (res as any).data ?? res
-        const payload = data.client ?? data ?? {}
-        setInitial(payload)
-        setForm(payload)
+        const normalized = normalizeResponse(data)
+        setInitial(normalized)
+        setForm(normalized)
       } catch (err) {
         console.error('Failed to load client info', err)
       } finally {
@@ -126,12 +144,14 @@ const ClientInfo: React.FC = () => {
       }
 
       await usersApi.postClientInformation(payload)
-      // refresh
+      
+      // Re-fetch to get updated data
       const res = await usersApi.getClientInformation()
       const data = (res as any).data ?? res
-      const payload2 = data.client ?? data ?? {}
-      setInitial(payload2)
-      setForm(payload2)
+      const normalized = normalizeResponse(data)
+      
+      setInitial(normalized)
+      setForm(normalized)
       setEditing(false)
       setIncomeFile(null)
       setCasteFile(null)
@@ -143,99 +163,239 @@ const ClientInfo: React.FC = () => {
     }
   }
 
-  if (loading) return <div className="p-4">Loading…</div>
+  const handleCancel = () => {
+    setForm(initial)
+    setEditing(false)
+    setIncomeFile(null)
+    setCasteFile(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+        <span className="ml-2 text-gray-600">Loading...</span>
+      </div>
+    )
+  }
+
+  const inputClasses = `w-full px-4 py-2.5 border-2 rounded-lg transition-colors
+    ${editing 
+      ? 'border-gray-200 bg-white focus:border-primary focus:outline-none' 
+      : 'border-transparent bg-gray-50 text-gray-700 cursor-default'
+    }`
+
+  const selectClasses = `w-full px-4 py-2.5 border-2 rounded-lg transition-colors appearance-none
+    ${editing 
+      ? 'border-gray-200 bg-white focus:border-primary focus:outline-none cursor-pointer' 
+      : 'border-transparent bg-gray-50 text-gray-700 cursor-default'
+    }`
+
+  const labelClasses = "block text-sm font-medium text-midnight mb-1.5"
 
   return (
-    <div className="bg-white rounded p-4 relative">
-      <div className="flex items-start justify-end">
-        {/* <h3 className="text-lg font-semibold">Client Information</h3> */}
-        <div>
-          <button
-            onClick={() => setEditing((s) => !s)}
-            className="text-sm px-3 py-1 border rounded bg-gray-50 hover:bg-gray-100"
-          >
-            {editing ? 'Cancel' : 'Edit'}
-          </button>
+    <div className="bg-white rounded-lg border border-gray-200">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <h3 className="text-lg font-semibold text-midnight">Personal Information</h3>
+        <div className="flex items-center gap-2">
+          {editing ? (
+            <>
+              <button 
+                type="button"
+                onClick={handleCancel} 
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={onSubmit}
+                disabled={submitting}
+                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-midnight transition-colors disabled:opacity-60"
+              >
+                {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                {submitting ? 'Saving...' : 'Save Changes'}
+              </button>
+            </>
+          ) : (
+            <button 
+              onClick={() => setEditing(true)} 
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-primary border-2 border-primary rounded-lg hover:bg-primary hover:text-white transition-colors"
+            >
+              <Edit3 className="w-4 h-4" />
+              Edit Profile
+            </button>
+          )}
         </div>
       </div>
 
-      <form className="mt-4 space-y-4" onSubmit={onSubmit}>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">City</label>
-            <input disabled={!editing} value={form.city || ''} onChange={(e) => onChange('city', e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
+      <form className="p-6 space-y-8" onSubmit={onSubmit}>
+        {/* Personal Details Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <User className="w-5 h-5 text-primary" />
+            <h4 className="text-base font-semibold text-midnight">Personal Details</h4>
           </div>
-          <div>
-            <label className="block text-sm font-medium">State</label>
-            <input disabled={!editing} value={form.state || ''} onChange={(e) => onChange('state', e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className={labelClasses}>Date of Birth</label>
+              <input 
+                disabled={!editing} 
+                type="date" 
+                value={form.dob ? form.dob.split('T')[0] : ''} 
+                onChange={(e) => onChange('dob', e.target.value)} 
+                className={inputClasses}
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Gender</label>
+              <select 
+                disabled={!editing} 
+                value={form.gender || ''} 
+                onChange={(e) => onChange('gender', e.target.value || undefined)} 
+                className={selectClasses}
+              >
+                <option value="">Select gender</option>
+                {genderOptions.map((g) => (
+                  <option key={g.value} value={g.value}>{g.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium">Country</label>
-            <input disabled={!editing} value={form.country || ''} onChange={(e) => onChange('country', e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Pincode</label>
-            <input disabled={!editing} value={form.pincode || ''} onChange={(e) => onChange('pincode', e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Date of birth</label>
-            <input disabled={!editing} type="date" value={form.dob ? form.dob.split('T')[0] : ''} onChange={(e) => onChange('dob', e.target.value)} className="mt-1 block w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Gender</label>
-            <select disabled={!editing} value={form.gender || ''} onChange={(e) => onChange('gender', e.target.value || undefined)} className="mt-1 block w-full border rounded px-3 py-2">
-              <option value="">Select</option>
-              {genderOptions.map((g) => (
-                <option key={g.value} value={g.value}>{g.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Income</label>
-            <input disabled={!editing} type="number" value={form.income ?? ''} onChange={(e) => onChange('income', e.target.value ? Number(e.target.value) : undefined)} className="mt-1 block w-full border rounded px-3 py-2" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Caste</label>
-            <select disabled={!editing} value={form.caste || ''} onChange={(e) => onChange('caste', e.target.value || undefined)} className="mt-1 block w-full border rounded px-3 py-2">
-              <option value="">Select</option>
-              {casteOptions.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        </section>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium">Income proof</label>
-            {form.incomeProofUrl && !editing && (
-              <div className="mt-1">
-                <a href={form.incomeProofUrl} target="_blank" rel="noreferrer" className="text-primary underline">View uploaded proof</a>
-              </div>
-            )}
-            {editing && (
-              <input type="file" accept="image/*,application/pdf" onChange={(e) => setIncomeFile(e.target.files?.[0] ?? null)} className="mt-1 block w-full" />
-            )}
+        {/* Location Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <MapPin className="w-5 h-5 text-primary" />
+            <h4 className="text-base font-semibold text-midnight">Location</h4>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium">Caste proof</label>
-            {form.casteProofUrl && !editing && (
-              <div className="mt-1">
-                <a href={form.casteProofUrl} target="_blank" rel="noreferrer" className="text-primary underline">View uploaded proof</a>
-              </div>
-            )}
-            {editing && (
-              <input type="file" accept="image/*,application/pdf" onChange={(e) => setCasteFile(e.target.files?.[0] ?? null)} className="mt-1 block w-full" />
-            )}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className={labelClasses}>City</label>
+              <input 
+                disabled={!editing} 
+                value={form.city || ''} 
+                onChange={(e) => onChange('city', e.target.value)} 
+                className={inputClasses}
+                placeholder="e.g. Mumbai"
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>State</label>
+              <input 
+                disabled={!editing} 
+                value={form.state || ''} 
+                onChange={(e) => onChange('state', e.target.value)} 
+                className={inputClasses}
+                placeholder="e.g. Maharashtra"
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Country</label>
+              <input 
+                disabled={!editing} 
+                value={form.country || ''} 
+                onChange={(e) => onChange('country', e.target.value)} 
+                className={inputClasses}
+                placeholder="e.g. India"
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Pincode</label>
+              <input 
+                disabled={!editing} 
+                value={form.pincode || ''} 
+                onChange={(e) => onChange('pincode', e.target.value)} 
+                className={inputClasses}
+                placeholder="e.g. 400001"
+              />
+            </div>
           </div>
-        </div>
+        </section>
 
-        <div className="flex justify-end">
-          <button type="submit" disabled={!editing || submitting} className="px-4 py-2 bg-primary text-white rounded disabled:opacity-60">
-            {submitting ? 'Saving…' : 'Save'}
-          </button>
-        </div>
+        {/* Financial & Category Section */}
+        <section>
+          <div className="flex items-center gap-2 mb-4">
+            <Wallet className="w-5 h-5 text-primary" />
+            <h4 className="text-base font-semibold text-midnight">Financial & Category Information</h4>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className={labelClasses}>Annual Income (₹)</label>
+              <input 
+                disabled={!editing} 
+                type="number" 
+                value={form.income ?? ''} 
+                onChange={(e) => onChange('income', e.target.value ? Number(e.target.value) : undefined)} 
+                className={inputClasses}
+                placeholder="e.g. 500000"
+              />
+            </div>
+            <div>
+              <label className={labelClasses}>Income Proof</label>
+              {form.incomeProofUrl && !editing ? (
+                <a 
+                  href={form.incomeProofUrl} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Document
+                </a>
+              ) : editing ? (
+                <input 
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  onChange={(e) => setIncomeFile(e.target.files?.[0] ?? null)} 
+                  className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              ) : (
+                <div className="px-4 py-2.5 bg-gray-50 rounded-lg text-sm text-gray-500">No document uploaded</div>
+              )}
+            </div>
+            <div>
+              <label className={labelClasses}>Category</label>
+              <select 
+                disabled={!editing} 
+                value={form.caste || ''} 
+                onChange={(e) => onChange('caste', e.target.value || undefined)} 
+                className={selectClasses}
+              >
+                <option value="">Select category</option>
+                {casteOptions.map((c) => (
+                  <option key={c.value} value={c.value}>{c.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClasses}>Category Certificate</label>
+              {form.casteProofUrl && !editing ? (
+                <a 
+                  href={form.casteProofUrl} 
+                  target="_blank" 
+                  rel="noreferrer" 
+                  className="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium text-primary bg-primary/10 rounded-lg hover:bg-primary/20 transition-colors"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  View Document
+                </a>
+              ) : editing ? (
+                <input 
+                  type="file" 
+                  accept="image/*,application/pdf" 
+                  onChange={(e) => setCasteFile(e.target.files?.[0] ?? null)} 
+                  className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                />
+              ) : (
+                <div className="px-4 py-2.5 bg-gray-50 rounded-lg text-sm text-gray-500">No document uploaded</div>
+              )}
+            </div>
+          </div>
+        </section>
       </form>
     </div>
   )
