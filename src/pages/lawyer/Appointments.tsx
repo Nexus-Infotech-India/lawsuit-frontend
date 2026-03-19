@@ -10,6 +10,7 @@ import { Upload, X } from 'lucide-react'
 import AgreementModal from '@/components/atoms/AgreementModal'
 import UploadInput from '@/components/atoms/UploadButton'
 import { UpdateAgreementUrlInput } from '@/schema/appointment.schema'
+import RescheduleModal from '@/components/molecules/RescheduleModal'
 import RenderAppointmentCard, { AppointmentData } from './RenderAppointmentCard'
 
 interface AppointmentResponse {
@@ -29,6 +30,7 @@ const LawyerAppointments: FC = () => {
   const [uploadModalOpen, setUploadModalOpen] = useState(false)
   const [selectedAppointmentForUpload, setSelectedAppointmentForUpload] = useState<AppointmentResponse['data'][0] | null>(null)
   const [uploadImageUrl, setUploadImageUrl] = useState<string | null>(null)
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentData | null>(null)
 
   const getAppointmentsQuery = useQuery({
     queryKey: ['appointments'],
@@ -206,8 +208,13 @@ const LawyerAppointments: FC = () => {
   }
 
   const handleReschedule = (appointment: AppointmentResponse['data'][0]) => {
-    // TODO: Implement reschedule functionality
-    alert(`Reschedule appointment with ${appointment.client?.name}`)
+    setRescheduleTarget(appointment)
+  }
+
+  const handleConfirmReschedule = async (scheduledAt: string, durationMins?: number) => {
+    if (!rescheduleTarget) return
+    await appointmentsApi.reschedule(rescheduleTarget.id, scheduledAt, durationMins)
+    getAppointmentsQuery.refetch()
   }
 
   const handleCancel = async (appointment: AppointmentResponse['data'][0]) => {
@@ -247,15 +254,15 @@ const LawyerAppointments: FC = () => {
                 key={tab.key}
                 onClick={() => setActiveTab(tab.key)}
                 className={`px-6 py-4 text-sm font-medium transition-colors relative ${activeTab === tab.key
-                    ? 'text-primary'
-                    : 'text-secondary hover:text-primary'
+                  ? 'text-primary'
+                  : 'text-secondary hover:text-primary'
                   }`}
               >
                 <span className="flex items-center gap-2">
                   {tab.label}
                   <span className={`px-2 py-0.5 text-xs rounded-full ${activeTab === tab.key
-                      ? 'bg-primary text-white'
-                      : 'bg-gray-100 text-gray-600'
+                    ? 'bg-primary text-white'
+                    : 'bg-gray-100 text-gray-600'
                     }`}>
                     {tab.count}
                   </span>
@@ -505,6 +512,18 @@ const LawyerAppointments: FC = () => {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Reschedule Modal */}
+        {rescheduleTarget && (
+          <RescheduleModal
+            isOpen={!!rescheduleTarget}
+            onClose={() => setRescheduleTarget(null)}
+            onConfirm={handleConfirmReschedule}
+            otherPartyName={rescheduleTarget.client?.name || 'Client'}
+            currentScheduledAt={rescheduleTarget.scheduledAt}
+            currentDurationMins={rescheduleTarget.durationMins || 30}
+          />
         )}
       </div>
     </div>

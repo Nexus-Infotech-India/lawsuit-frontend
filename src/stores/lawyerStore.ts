@@ -21,7 +21,7 @@ interface LawyerStore {
   limit: number
   filterOptions: FilterOptions
   allFilterOptions: FilterOptions
-  fetchLawyers: (filters?: { q?: string; specialization?: string; location?: string; maxFee?: number; languages?: string[]; latitude?: number; longitude?: number; radiusKm?: number; state?: string; sortBy?: string; order?: 'asc' | 'desc' }, page?: number, limit?: number) => Promise<void>
+  fetchLawyers: (filters?: { q?: string; specialization?: string; location?: string; maxFee?: number; languages?: string[]; latitude?: number; longitude?: number; radiusKm?: number; state?: string; clientPincode?: string; sortBy?: string; order?: 'asc' | 'desc' }, page?: number, limit?: number) => Promise<void>
   fetchLawyerById: (id: string) => Promise<Lawyer | null>
 }
 
@@ -54,6 +54,7 @@ export const useLawyerStore = create<LawyerStore>((set, get) => ({
         if (filters.latitude != null) params.latitude = filters.latitude
         if (filters.longitude != null) params.longitude = filters.longitude
         if (filters.radiusKm) params.radiusKm = filters.radiusKm
+        if (filters.clientPincode) params.clientPincode = filters.clientPincode
         if (filters.sortBy) params.sortBy = filters.sortBy
         if (filters.order) params.order = filters.order
       }

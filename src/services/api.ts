@@ -151,6 +151,7 @@ export const lawyersApi = {
     specialization?: string
     city?: string
     state?: string
+    clientPincode?: string
     latitude?: number
     longitude?: number
     radiusKm?: number
@@ -176,9 +177,9 @@ export const appointmentsApi = {
   confirmPayment: (appointmentId: string, body: { appointmentId: string; razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) =>
     api.post(`/appointments/${appointmentId}/confirm-payment`, body),
   getAll: () => api.get('/appointments'),
-  reschedule: (id: string, datetime: string) =>
-    api.put(`/appointments/${id}/reschedule`, { datetime }),
-  cancel: (id: string) => api.put(`/appointments/${id}/cancel`),
+  reschedule: (id: string, scheduledAt: string, durationMins?: number) =>
+    api.put(`/appointments/${id}/reschedule`, { scheduledAt, ...(durationMins != null ? { durationMins } : {}) }),
+  cancel: (id: string) => api.post(`/appointments/${id}/cancel`),
   updateStatus: (id: string, status: string) => api.patch(`/appointments/${id}`, { status }),
   attend: (id: string) => api.post(`/appointments/${id}/attend`),
   // availability: call backend availability endpoint. Browsers do not reliably send
@@ -283,6 +284,8 @@ export const adminApi = {
 
 export const videoApi = {
   getMeeting: (appointmentId: string) => api.get(`/video/meeting/${appointmentId}`),
+  createChatSession: (chatId: string) => api.post(`/video/chat/${chatId}/session`),
+  getChatSession: (chatId: string) => api.get(`/video/chat/${chatId}/session`),
 }
 
 export const storageApi = {

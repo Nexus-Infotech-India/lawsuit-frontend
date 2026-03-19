@@ -40,6 +40,7 @@ const SearchPage: FC = () => {
   const [geoLoading, setGeoLoading] = useState(false)
   const [geoError, setGeoError] = useState<string | null>(null)
   const [radiusKm, setRadiusKm] = useState(50)
+  const [clientPincode, setClientPincode] = useState('')
   const [sortBy, setSortBy] = useState('rating')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -75,6 +76,12 @@ const SearchPage: FC = () => {
       mappedFilters.radiusKm = radiusKm
     }
 
+    // Pincode-based geo search (works without GPS)
+    if (clientPincode && /^\d{6}$/.test(clientPincode.trim())) {
+      mappedFilters.clientPincode = clientPincode.trim()
+      if (!geoCoords) mappedFilters.radiusKm = radiusKm
+    }
+
     // Sort
     mappedFilters.sortBy = sortBy
     mappedFilters.order = sortOrder
@@ -84,7 +91,7 @@ const SearchPage: FC = () => {
 
   useEffect(() => {
     load(page)
-  }, [searchQuery, filters, page, geoCoords, radiusKm, sortBy, sortOrder])
+  }, [searchQuery, filters, page, geoCoords, radiusKm, clientPincode, sortBy, sortOrder])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -100,7 +107,7 @@ const SearchPage: FC = () => {
     setPage(1)
   }
 
-  const hasActiveFilters = Object.values(filters).some(value => value !== undefined) || geoCoords !== null
+  const hasActiveFilters = Object.values(filters).some(value => value !== undefined) || geoCoords !== null || (clientPincode.length === 6)
 
   const removeFilter = (key: keyof Filters) => {
     setFilters(prev => {
@@ -223,6 +230,31 @@ const SearchPage: FC = () => {
                 </button>
               </div>
             )}
+
+            {/* Pincode search */}
+            <div className="inline-flex items-center gap-2">
+              <input
+                type="text"
+                value={clientPincode}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 6)
+                  setClientPincode(val)
+                  if (val.length === 6 || val.length === 0) setPage(1)
+                }}
+                placeholder="Enter Pincode"
+                maxLength={6}
+                className="w-28 text-sm rounded-lg border border-gray-300 px-2 py-1.5 bg-white focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+              {clientPincode.length === 6 && (
+                <button
+                  onClick={() => { setClientPincode(''); setPage(1) }}
+                  className="text-gray-400 hover:text-gray-600 text-sm"
+                  title="Clear pincode"
+                >
+                  ×
+                </button>
+              )}
+            </div>
 
             {/* Radius selector — shown only when geo is active */}
             {geoCoords && (
@@ -428,6 +460,19 @@ const SearchPage: FC = () => {
                       <button
                         onClick={clearLocation}
                         className="ml-2 text-blue-500 hover:text-blue-700"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                  {clientPincode.length === 6 && (
+                    <div className="inline-flex items-center bg-purple-100 rounded-full px-3 py-1 text-sm">
+                      <span className="text-purple-700">
+                        📮 Pincode: {clientPincode}
+                      </span>
+                      <button
+                        onClick={() => { setClientPincode(''); setPage(1) }}
+                        className="ml-2 text-purple-500 hover:text-purple-700"
                       >
                         ×
                       </button>

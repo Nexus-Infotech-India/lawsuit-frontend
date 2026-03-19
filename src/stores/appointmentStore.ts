@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Appointment } from '@/types'
+import { appointmentsApi } from '@/services/api'
 
 interface AppointmentStore {
   appointments: Appointment[]
@@ -7,7 +8,7 @@ interface AppointmentStore {
   error: string | null
   fetchAppointments: () => Promise<void>
   bookAppointment: (payload: { lawyerId: string; datetime: string; paymentId?: string }) => Promise<void>
-  rescheduleAppointment: (id: string, datetime: string) => Promise<void>
+  rescheduleAppointment: (id: string, scheduledAt: string, durationMins?: number) => Promise<void>
   cancelAppointment: (id: string) => Promise<void>
 }
 
@@ -19,12 +20,11 @@ export const useAppointmentStore = create<AppointmentStore>((set, get) => ({
   fetchAppointments: async () => {
     set({ loading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      const response = await fetch('/api/appointments')
-      const data = await response.json()
+      const response = await appointmentsApi.getAll()
+      const data = response.data
       // normalize response shape: API may return { data: [...] } or the array directly
-  const list = (data && (data.data ?? data)) || []
-  set({ appointments: Array.isArray(list) ? (list as Appointment[]) : [], loading: false })
+      const list = (data && ((data as any).data ?? data)) || []
+      set({ appointments: Array.isArray(list) ? (list as Appointment[]) : [], loading: false })
     } catch (error) {
       set({ error: 'Failed to fetch appointments', loading: false })
     }
@@ -33,15 +33,13 @@ export const useAppointmentStore = create<AppointmentStore>((set, get) => ({
   bookAppointment: async (payload) => {
     set({ loading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      const response = await fetch('/api/appointments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const response = await appointmentsApi.book({
+        lawyerId: payload.lawyerId,
+        scheduledAt: payload.datetime,
       })
-      const data = await response.json()
+      const data = response.data
       // API may return { data: appt } or the appt itself
-      const appt = (data && (data.data ?? data)) as Appointment
+      const appt = (data && ((data as any).data ?? data)) as Appointment
       set((state) => ({
         appointments: [...state.appointments, appt],
         loading: false
@@ -51,20 +49,15 @@ export const useAppointmentStore = create<AppointmentStore>((set, get) => ({
     }
   },
 
-  rescheduleAppointment: async (id, datetime) => {
+  rescheduleAppointment: async (id, scheduledAt, durationMins) => {
     set({ loading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await fetch(`/api/appointments/${id}/reschedule`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ datetime })
-      })
-      
+      await appointmentsApi.reschedule(id, scheduledAt, durationMins)
+
       const appointments = get().appointments.map(apt =>
-        apt.id === id ? { ...apt, datetime } : apt
+        apt.id === id ? { ...apt, scheduledAt, status: 'CONFIRMED' } : apt
       )
-  set({ appointments: appointments as Appointment[], loading: false })
+      set({ appointments: appointments as Appointment[], loading: false })
     } catch (error) {
       set({ error: 'Failed to reschedule appointment', loading: false })
     }
@@ -73,15 +66,12 @@ export const useAppointmentStore = create<AppointmentStore>((set, get) => ({
   cancelAppointment: async (id) => {
     set({ loading: true, error: null })
     try {
-      // TODO: Replace with actual API call
-      await fetch(`/api/appointments/${id}/cancel`, {
-        method: 'PUT'
-      })
-      
+      await appointmentsApi.cancel(id)
+
       const appointments = get().appointments.map(apt =>
         apt.id === id ? { ...apt, status: 'cancelled' } : apt
       )
-  set({ appointments: appointments as Appointment[], loading: false })
+      set({ appointments: appointments as Appointment[], loading: false })
     } catch (error) {
       set({ error: 'Failed to cancel appointment', loading: false })
     }

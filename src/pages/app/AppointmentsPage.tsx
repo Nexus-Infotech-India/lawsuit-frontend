@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import api, { apiEndpoints, appointmentsApi } from '@/services/api'
 import { useQuery } from '@tanstack/react-query'
 import AgreementModal from '@/components/atoms/AgreementModal'
+import RescheduleModal from '@/components/molecules/RescheduleModal'
 import RenderAppointmentCard, { AppointmentData } from './RenderAppointmentCard'
 
 interface AppointmentResponse {
@@ -16,6 +17,7 @@ const AppointmentsPage: FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('upcoming')
   const [selectedAgreementUrl, setSelectedAgreementUrl] = useState<{ appointmentId: string, aggrementUrl: string | null } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
+  const [rescheduleTarget, setRescheduleTarget] = useState<AppointmentData | null>(null)
 
   const getAppointmentsQuery = useQuery({
     queryKey: ['appointments'],
@@ -65,7 +67,13 @@ const AppointmentsPage: FC = () => {
   }
 
   const handleReschedule = (appointment: AppointmentData) => {
-    alert(`Reschedule appointment with ${appointment.lawyer?.name}`)
+    setRescheduleTarget(appointment)
+  }
+
+  const handleConfirmReschedule = async (scheduledAt: string, durationMins?: number) => {
+    if (!rescheduleTarget) return
+    await appointmentsApi.reschedule(rescheduleTarget.id, scheduledAt, durationMins)
+    getAppointmentsQuery.refetch()
   }
 
   const handleCancel = async (appointment: AppointmentData) => {
@@ -181,6 +189,18 @@ const AppointmentsPage: FC = () => {
           <></>
         )
         }
+
+        {/* Reschedule Modal */}
+        {rescheduleTarget && (
+          <RescheduleModal
+            isOpen={!!rescheduleTarget}
+            onClose={() => setRescheduleTarget(null)}
+            onConfirm={handleConfirmReschedule}
+            otherPartyName={rescheduleTarget.lawyer?.name || 'Lawyer'}
+            currentScheduledAt={rescheduleTarget.scheduledAt}
+            currentDurationMins={rescheduleTarget.durationMins || 30}
+          />
+        )}
       </div>
     </div>
   )

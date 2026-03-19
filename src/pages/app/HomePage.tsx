@@ -1,7 +1,6 @@
 import { FC, FormEvent, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
-import { Search, Shield, Clock, Gavel, BookOpen, MessageCircle, ChevronRight, Star, MapPin, PhoneCall, Calendar, FileText, BellRing, Users } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Shield, Gavel, BookOpen, ChevronRight, Star, MapPin, PhoneCall, Calendar, FileText, BellRing, Users } from 'lucide-react';
 import { lawyersApi } from '@/services/api';
 
 const DEFAULT_CASE_TYPE_OPTIONS = [
