@@ -9,7 +9,7 @@ const OtpVerifyPage: FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const { verifyOtp, isLoading, error, clearError } = useAuthStore()
-  
+
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   // identifier can be email or phone depending on the flow
   const [identifier, setIdentifier] = useState('')
@@ -35,7 +35,7 @@ const OtpVerifyPage: FC = () => {
 
   const handleChange = (index: number, value: string) => {
     if (error) clearError()
-    
+
     // Only allow numbers
     if (value && !/^\d+$/.test(value)) return
 
@@ -72,12 +72,14 @@ const OtpVerifyPage: FC = () => {
       await verifyOtp(idToVerify, otpString)
       const user = useAuthStore.getState().user?.role?.toString?.().toUpperCase?.()
       if (user === 'LAWYER') {
-        navigate('/lawyer/appointments' , {replace: true})
+        navigate('/lawyer/appointments', { replace: true })
       } else if (user === 'ADMIN') {
-        navigate('/admin/dashboard', {replace: true})
+        navigate('/admin/dashboard', { replace: true })
+      } else if (user === 'COURT_ADMIN') {
+        navigate('/court-admin/dashboard', { replace: true })
       } else {
         // default to client home
-        navigate('/app/home', {replace: true})
+        navigate('/app/home', { replace: true })
       }
     } catch (err) {
       // Error is handled by the store

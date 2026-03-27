@@ -3,7 +3,7 @@ import { appointmentsApi } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import useWalletStore from '@/stores/walletStore'
 import { useNavigate } from 'react-router-dom'
-import { Wallet, CreditCard } from 'lucide-react'
+import { Wallet, CreditCard, ShieldCheck } from 'lucide-react'
 
 import SlotSelect from '../molecules/SlotSelect'
 
@@ -18,6 +18,7 @@ interface LawyerCardProps {
   languages: string[];
   avatar?: string;
   distance?: number;
+  isVerified?: boolean;
   onView: (id: string) => void;
 }
 
@@ -35,6 +36,7 @@ const LawyerCard: FC<LawyerCardProps> = ({
   languages,
   avatar,
   distance,
+  isVerified,
   onView,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -225,17 +227,25 @@ const LawyerCard: FC<LawyerCardProps> = ({
         <div className="flex-1">
           <div className="flex items-start justify-between">
             <div>
-              {/* Clickable name */}
-              <h3
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onView(id);
-                }}
-                className="text-xl font-semibold text-gray-900
-                           cursor-pointer hover:text-primary transition-colors"
-              >
-                {name}
-              </h3>
+              {/* Clickable name + verified badge */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onView(id);
+                  }}
+                  className="text-xl font-semibold text-gray-900
+                             cursor-pointer hover:text-primary transition-colors"
+                >
+                  {name}
+                </h3>
+                {isVerified && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 border border-green-200">
+                    <ShieldCheck className="w-3 h-3" />
+                    Verified
+                  </span>
+                )}
+              </div>
 
               <div className="mt-1 text-sm font-medium text-primary">
                 {specialization.join(' • ')}

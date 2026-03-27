@@ -20,7 +20,7 @@ const LoginPage: FC = () => {
   const navigate = useNavigate()
   const { login, isLoading, error, clearError } = useAuthStore()
   const [showPassword, setShowPassword] = useState(false)
-  
+
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -43,12 +43,12 @@ const LoginPage: FC = () => {
       const user = useAuthStore.getState().user
       const role = user?.role?.toString?.().toUpperCase?.()
       if (role === 'LAWYER') {
-        navigate('/lawyer/appointments' , {replace: true})
+        navigate('/lawyer/dashboard', { replace: true })
       } else if (role === 'ADMIN') {
-        navigate('/admin/dashboard', {replace: true})
+        navigate('/admin/dashboard', { replace: true })
       } else {
         // default to client home
-        navigate('/app/home', {replace: true})
+        navigate('/app/home', { replace: true })
       }
     } catch (err) {
       // Error is handled by the store
@@ -63,21 +63,39 @@ const LoginPage: FC = () => {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Sign in to your account
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
+          <div className="mt-4 flex justify-center gap-4">
+            <Button
+              variant="primary"
+              size="sm"
+              className="pointer-events-none opacity-100 bg-primary"
+            >
+              Client / Lawyer
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-gray-600 hover:text-primary hover:bg-gray-100"
+              onClick={() => navigate('/auth/court-admin-login')}
+              type="button"
+            >
+              Court Admin
+            </Button>
+          </div>
+          <p className="mt-4 text-center text-sm text-gray-600">
             Or{' '}
             <Link to="/auth/register" className="font-medium text-primary hover:text-primary-dark">
               create a new account
             </Link>
           </p>
         </div>
-        
+
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           {error && (
             <div className="rounded-md bg-red-50 p-4">
               <div className="text-sm text-red-700">{error}</div>
             </div>
           )}
-          
+
           <div className="rounded-md shadow-sm -space-y-px">
             <div>
               <label htmlFor="email" className="sr-only">

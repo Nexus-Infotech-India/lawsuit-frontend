@@ -12,7 +12,7 @@ interface AuthState {
   isAuthenticated: boolean
   error: string | null
   login: (email: string, password: string) => Promise<void>
-  register: (data: { name: string; email: string; password: string; role: string; phone?: number | string }) => Promise<void>
+  register: (data: { name: string; email: string; password: string; role: string; phone?: number | string; registrationNumber?: string; courtDetails?: any }) => Promise<void>
   verifyOtp: (identifier: string, code: string) => Promise<void>
   requestOtp: (identifier: string) => Promise<any>
   logout: () => void
@@ -56,7 +56,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authApi.register(payload as any)
       // backend returns { user, accessToken, refreshToken }
       const { user, accessToken, refreshToken } = response.data
-      storage.setUserData({id:user.id, role:user.role,})
+      storage.setUserData({ id: user.id, role: user.role, })
       if (accessToken) storage.setAuthToken(accessToken)
       if (refreshToken) storage.setRefreshToken(refreshToken)
       set({ user, token: accessToken ?? null, isAuthenticated: !!accessToken })
@@ -104,7 +104,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       const refresh = storage.getRefreshToken()
       if (refresh) {
         // fire-and-forget logout to backend
-        authApi.logout(refresh).catch(() => {})
+        authApi.logout(refresh).catch(() => { })
       }
     } catch (err) {
       // ignore

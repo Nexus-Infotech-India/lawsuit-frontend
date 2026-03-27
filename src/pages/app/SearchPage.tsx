@@ -519,6 +519,7 @@ const SearchPage: FC = () => {
                             languages={lawyer.languages || []}
                             avatar={lawyer.avatar}
                             distance={lawyer.distance}
+                            isVerified={lawyer.isVerified}
                             onView={() => navigate(`/app/lawyers/${lawyer.id}`)}
                           />
                         </div>

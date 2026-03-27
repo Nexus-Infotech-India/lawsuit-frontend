@@ -26,7 +26,18 @@ const RegisterPage: FC = () => {
     email: '',
     password: '',
     phone: '',
-    role: 'client' as const,
+    role: 'client',
+    registrationNumber: '',
+  })
+
+  const [courtDetails, setCourtDetails] = useState({
+    name: '',
+    type: 'DISTRICT',
+    address: '',
+    pincode: '',
+    state: '',
+    district: '',
+    city: '',
   })
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
@@ -38,12 +49,30 @@ const RegisterPage: FC = () => {
     if (error) clearError()
   }
 
+  const handleCourtChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setCourtDetails(prev => ({
+      ...prev,
+      [name]: value
+    }))
+    if (error) clearError()
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      await register(formData)
-      // After successful registration, request OTP for the user's email then navigate to verification
-      await requestOtp(formData.email)
+      const payload: any = { ...formData };
+      if (formData.role === 'court_admin') {
+        const detailsToSubmit = { ...courtDetails };
+        if (!detailsToSubmit.city) {
+          delete (detailsToSubmit as any).city;
+        }
+        payload.courtDetails = detailsToSubmit;
+      } else {
+        delete payload.registrationNumber;
+      }
+      await register(payload)
+      // After successful registration, the backend automatically sends an OTP. Navigate directly to verification.
       navigate('/auth/otp-verify', { state: { identifier: formData.email } })
     } catch (err) {
       // Error is handled by the store
@@ -169,8 +198,55 @@ const RegisterPage: FC = () => {
               >
                 <option value="client">Client</option>
                 <option value="lawyer">Lawyer</option>
+                <option value="court_admin">Court Admin</option>
               </select>
             </div>
+
+            {formData.role === 'court_admin' && (
+              <div className="pt-4 border-t border-gray-200 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900">Court Details</h3>
+                <div>
+                  <label htmlFor="registrationNumber" className="block text-sm font-medium text-gray-700">Registration Number</label>
+                  <input id="registrationNumber" name="registrationNumber" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={formData.registrationNumber} onChange={handleChange} />
+                </div>
+                <div>
+                  <label htmlFor="court-name" className="block text-sm font-medium text-gray-700">Court Name</label>
+                  <input id="court-name" name="name" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.name} onChange={handleCourtChange} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="court-type" className="block text-sm font-medium text-gray-700">Type</label>
+                    <select id="court-type" name="type" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.type} onChange={handleCourtChange}>
+                      <option value="DISTRICT">District</option>
+                      <option value="HIGH_COURT">High Court</option>
+                      <option value="SUPREME_COURT">Supreme Court</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label htmlFor="court-pincode" className="block text-sm font-medium text-gray-700">Pincode</label>
+                    <input id="court-pincode" name="pincode" type="text" required pattern="\d{6}" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.pincode} onChange={handleCourtChange} />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="court-address" className="block text-sm font-medium text-gray-700">Address</label>
+                  <input id="court-address" name="address" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.address} onChange={handleCourtChange} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label htmlFor="court-city" className="block text-sm font-medium text-gray-700">City (Optional)</label>
+                    <input id="court-city" name="city" type="text" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.city} onChange={handleCourtChange} />
+                  </div>
+                  <div>
+                    <label htmlFor="court-district" className="block text-sm font-medium text-gray-700">District</label>
+                    <input id="court-district" name="district" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.district} onChange={handleCourtChange} />
+                  </div>
+                  <div>
+                    <label htmlFor="court-state" className="block text-sm font-medium text-gray-700">State</label>
+                    <input id="court-state" name="state" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.state} onChange={handleCourtChange} />
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>

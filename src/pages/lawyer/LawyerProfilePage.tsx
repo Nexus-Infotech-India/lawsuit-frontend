@@ -8,6 +8,7 @@ import { useUserStore } from '@/stores/userStore'
 import { usersApi } from '@/services/api'
 import Button from '@/components/atoms/Button'
 import LawyerInfo from '@/components/molecules/LawyerInfo'
+import LawyerVerificationSection from '@/components/organisms/LawyerVerificationSection'
 
 const LawyerProfilePage: FC = () => {
   const navigate = useNavigate()
@@ -272,6 +273,10 @@ const LawyerProfilePage: FC = () => {
           <div className="mt-6">
             <h1 className=" flex justify-center text-lg font-semibold text-midnight mb-2">Additional Information</h1>
             <LawyerInfo />
+
+            <div className="mt-12">
+              <LawyerVerificationSection />
+            </div>
           </div>
         </div>
       </section>

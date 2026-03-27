@@ -26,7 +26,7 @@ const api = axios.create({
 
 // Add auth token to requests
 api.interceptors.request.use((config) => {
-  const token = useAuthStore.getState().token
+  const token = storage.getAuthToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -113,7 +113,7 @@ api.interceptors.response.use(
       .then(() => {
         if (originalRequest) {
           ; (originalRequest as any)._retry = true
-          const token = useAuthStore.getState().token
+          const token = storage.getAuthToken()
           if (token) {
             originalRequest.headers = originalRequest.headers || {}
             originalRequest.headers.Authorization = `Bearer ${token}`
@@ -322,6 +322,27 @@ export const apiEndpoints = {
     updateResolutionMethod: (caseid: string) => `${baseURL}/cases/${caseid}/resolution-method`,
     closeCase: (caseid: string) => `${baseURL}/cases/${caseid}/close`,
   }
+}
+
+export const courtAdminApi = {
+  login: (email: string, password: string) => api.post('/court-admin/login', { email, password }),
+  getCourtsByPincode: (pincode: string) => api.get(`/court-admin/public/courts/by-pincode/${pincode}`),
+  getAdminsByPincode: (pincode: string) => api.get(`/court-admin/public/admins/by-pincode/${pincode}`),
+  getMe: () => api.get('/court-admin/me'),
+  updateMe: (data: { name?: string; email?: string; phone?: string; avatarUrl?: string; registrationNumber?: string }) =>
+    api.put('/court-admin/me', data),
+  updateMyCourt: (data: any) => api.put('/court-admin/me/court', data),
+
+  // Lawyer actions
+  requestVerification: (courtAdminId: string) => api.post('/court-admin/verifications/request', { courtAdminId }),
+  getMyRequests: () => api.get('/court-admin/verifications/my-requests'),
+
+  // Court Admin actions
+  getPendingVerifications: () => api.get('/court-admin/verifications/pending'),
+  getAllVerifications: () => api.get('/court-admin/verifications'),
+  getVerificationDocuments: (lawyerId: string) => api.get(`/court-admin/verify/${lawyerId}/documents`),
+  verifyLawyer: (lawyerId: string, status: 'APPROVED' | 'REJECTED', remarks?: string) =>
+    api.post(`/court-admin/verify/${lawyerId}`, { status, remarks }),
 }
 
 export default api

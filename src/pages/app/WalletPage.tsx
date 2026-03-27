@@ -1,5 +1,5 @@
 import { FC, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import useWalletStore from '../../stores/walletStore'
 import { useAuthStore } from '../../stores/authStore'
 import type { WalletTransaction, TransactionType } from '../../types'
@@ -22,6 +22,7 @@ type TabFilter = 'all' | 'credits' | 'debits'
 const WalletPage: FC = () => {
   const { balance, transactions, totalTransactions, currentPage, loading, error, fetchBalance, fetchTransactions, addMoney, confirmAddMoney, transfer } = useWalletStore()
   const authUser = useAuthStore((s) => s.user)
+  const location = useLocation()
 
   const [activeTab, setActiveTab] = useState<TabFilter>('all')
   const [showAddMoney, setShowAddMoney] = useState(false)
@@ -175,7 +176,7 @@ const WalletPage: FC = () => {
               Add Money
             </button>
             <Link
-              to="/app/withdraw"
+              to={location.pathname.startsWith('/lawyer') ? '/lawyer/withdraw' : '/app/withdraw'}
               className="flex items-center gap-2 px-5 py-2.5 bg-white/15 text-white rounded-lg font-medium hover:bg-white/25 transition-colors border border-white/20"
             >
               <ArrowUpRight className="w-4 h-4" />

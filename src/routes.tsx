@@ -3,6 +3,7 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
+import { useCourtAdminStore } from './stores/courtAdminStore'
 
 // Public Pages
 import LandingPage from './pages/LandingPage'
@@ -46,9 +47,12 @@ import LawyerProfilePage from './pages/lawyer/LawyerProfilePage'
 import LexRateTable from './components/organisms/LexRatesTable'
 import ViewCasePagesLawyer from './pages/lawyer/ViewCasePagesLawyer'
 import CaseDetailsLawyerPage from './pages/lawyer/CaseDetailsLawyerPage'
-import AgreementTemplatesPage from './pages/lawyer/AgreementTemplatesPage'
-
-
+import AgreementTemplatesPage from './pages/lawyer/AgreementTemplatesPage'// Court Admin Pages
+import CourtAdminLayout from './layouts/CourtAdminLayout'
+import CourtAdminLoginPage from './pages/auth/CourtAdminLoginPage'
+import CourtAdminDashboardPage from './pages/courtAdmin/CourtAdminDashboardPage'
+import VerifyLawyerPage from './pages/courtAdmin/VerifyLawyerPage'
+import CourtAdminProfilePage from './pages/courtAdmin/CourtAdminProfilePage'
 
 
 
@@ -56,6 +60,11 @@ import AgreementTemplatesPage from './pages/lawyer/AgreementTemplatesPage'
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuthStore()
   return isAuthenticated ? <>{children}</> : <Navigate to="/auth/login" replace />
+}
+
+const CourtAdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
+  const { isAuthenticated, user } = useCourtAdminStore()
+  return isAuthenticated && user?.role === 'COURT_ADMIN' ? <>{children}</> : <Navigate to="/auth/court-admin-login" replace />
 }
 
 const AppRoutes = () => {
@@ -67,6 +76,7 @@ const AppRoutes = () => {
       <Route path="/" element={<LandingPage />} />
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/admin-login" element={<AdminLoginPage />} />
+      <Route path="/auth/court-admin-login" element={<CourtAdminLoginPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
       <Route path="/auth/otp-verify" element={<OtpVerifyPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
@@ -77,7 +87,13 @@ const AppRoutes = () => {
         path="/app"
         element={
           <ProtectedRoute>
-            <AppLayout />
+            {user?.role === 'LAWYER' ? (
+              <Navigate to="/lawyer/dashboard" replace />
+            ) : user?.role === 'ADMIN' ? (
+              <Navigate to="/admin/dashboard" replace />
+            ) : (
+              <AppLayout />
+            )}
           </ProtectedRoute>
         }
       >
@@ -137,6 +153,7 @@ const AppRoutes = () => {
         }
       >
         {/* <Route index element={<Navigate to="appointments" replace />} /> */}
+        <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<LawyerHomePage />} />
         <Route path="appointments" element={<LawyerAppointments />} />
         <Route path="case/:caseId" element={<CaseDetailsLawyerPage />} />
@@ -146,8 +163,25 @@ const AppRoutes = () => {
         <Route path="consultation/:appointmentId" element={<VideoConsultationPage />} />
         <Route path="call-history" element={<CallHistoryPage />} />
 
+        <Route path="wallet" element={<WalletPage />} />
+        <Route path="withdraw" element={<WithdrawPage />} />
         <Route path="legal-eagle" element={<AiChatPage />} />
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
+      </Route>
+
+      {/* Court Admin Routes */}
+      <Route
+        path="/court-admin"
+        element={
+          <CourtAdminProtectedRoute>
+            <CourtAdminLayout />
+          </CourtAdminProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<CourtAdminDashboardPage />} />
+        <Route path="verify/:lawyerId" element={<VerifyLawyerPage />} />
+        <Route path="profile" element={<CourtAdminProfilePage />} />
       </Route>
 
       {/* Fallback route */}

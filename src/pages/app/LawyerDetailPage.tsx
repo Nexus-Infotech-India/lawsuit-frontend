@@ -301,16 +301,12 @@ const LawyerDetailPage: FC = () => {
                 </div>
 
                 <div className="text-right flex-shrink-0">
-                  <div className="text-sm text-green-600 flex items-center justify-end gap-2">
-                    {lawyer.isVerified ? (
-                      <>
-                        <Shield className="w-4 h-4" />
-                        <span>Verified</span>
-                      </>
-                    ) : (
-                      <span className="text-red-500">Not verified</span>
-                    )}
-                  </div>
+                  {lawyer.isVerified && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-700 border border-green-200">
+                      <Shield className="w-4 h-4" />
+                      Court Verified
+                    </span>
+                  )}
                 </div>
               </div>
             </div>
