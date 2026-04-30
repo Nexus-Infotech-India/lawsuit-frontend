@@ -61,6 +61,20 @@ import CourtAdminLoginPage from './pages/auth/CourtAdminLoginPage'
 import CourtAdminDashboardPage from './pages/courtAdmin/CourtAdminDashboardPage'
 import VerifyLawyerPage from './pages/courtAdmin/VerifyLawyerPage'
 import CourtAdminProfilePage from './pages/courtAdmin/CourtAdminProfilePage'
+import OrganizationVerificationsPage from './pages/courtAdmin/OrganizationVerificationsPage'
+
+// Organization (Law Firm) Pages
+import OrganizationLayout from './layouts/OrganizationLayout'
+import OrganizationDashboardPage from './pages/organization/OrganizationDashboardPage'
+import OrganizationProfilePage from './pages/organization/OrganizationProfilePage'
+import OrganizationLawyersPage from './pages/organization/OrganizationLawyersPage'
+import OrganizationRequestsPage from './pages/organization/OrganizationRequestsPage'
+import OrganizationVerificationPage from './pages/organization/OrganizationVerificationPage'
+
+// Client-side firm discovery
+import FirmsListPage from './pages/app/firms/FirmsListPage'
+import FirmDetailPage from './pages/app/firms/FirmDetailPage'
+import MyFirmRequestsPage from './pages/app/firms/MyFirmRequestsPage'
 
 
 
@@ -102,6 +116,8 @@ const AppRoutes = () => {
               <Navigate to="/lawyer/dashboard" replace />
             ) : user?.role === 'ADMIN' ? (
               <Navigate to="/admin/dashboard" replace />
+            ) : user?.role === 'ORGANIZATION' ? (
+              <Navigate to="/organization/dashboard" replace />
             ) : (
               <AppLayout />
             )}
@@ -132,7 +148,33 @@ const AppRoutes = () => {
         <Route path="mediation/:id" element={<MediationDetailPage />} />
         <Route path="mediation/:id/room" element={<MediationRoomPage />} />
 
+        {/* Law firms (organization) discovery & booking */}
+        <Route path="firms" element={<FirmsListPage />} />
+        <Route path="firms/:id" element={<FirmDetailPage />} />
+        <Route path="firms-requests" element={<MyFirmRequestsPage />} />
+
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
+      </Route>
+
+      {/* Organization (Law Firm) Routes */}
+      <Route
+        path="/organization"
+        element={
+          <ProtectedRoute>
+            {user?.role === 'ORGANIZATION' ? (
+              <OrganizationLayout />
+            ) : (
+              <Navigate to="/app/home" replace />
+            )}
+          </ProtectedRoute>
+        }
+      >
+        <Route index element={<Navigate to="dashboard" replace />} />
+        <Route path="dashboard" element={<OrganizationDashboardPage />} />
+        <Route path="profile" element={<OrganizationProfilePage />} />
+        <Route path="lawyers" element={<OrganizationLawyersPage />} />
+        <Route path="requests" element={<OrganizationRequestsPage />} />
+        <Route path="verification" element={<OrganizationVerificationPage />} />
       </Route>
 
       {/* Admin Routes */}
@@ -202,6 +244,7 @@ const AppRoutes = () => {
         <Route index element={<Navigate to="dashboard" replace />} />
         <Route path="dashboard" element={<CourtAdminDashboardPage />} />
         <Route path="verify/:lawyerId" element={<VerifyLawyerPage />} />
+        <Route path="organization-verifications" element={<OrganizationVerificationsPage />} />
         <Route path="profile" element={<CourtAdminProfilePage />} />
       </Route>
 

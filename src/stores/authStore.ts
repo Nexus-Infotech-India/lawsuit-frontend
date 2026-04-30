@@ -5,6 +5,36 @@ import storage from '@/utils/storage'
 import { authApi } from '@/services/api'
 import type { User } from '@/types'
 
+/**
+ * Decode a JWT payload (no verification — just for reading claims like organizationId).
+ * Returns null on any parse error.
+ */
+function decodeJwt<T = Record<string, any>>(token: string | null | undefined): T | null {
+  if (!token) return null
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = parts[1]
+    // Base64URL decode
+    const base64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4)
+    const json = atob(padded)
+    return JSON.parse(json) as T
+  } catch {
+    return null
+  }
+}
+
+/** Merge JWT claims into the user object (organizationId, role override). */
+function mergeJwtClaims(user: any, token: string | null | undefined): any {
+  const claims = decodeJwt<{ organizationId?: string | null; role?: string }>(token)
+  if (!claims) return user
+  return {
+    ...user,
+    ...(claims.organizationId !== undefined ? { organizationId: claims.organizationId } : {}),
+  }
+}
+
 interface AuthState {
   user: User | null
   token: string | null
@@ -12,7 +42,7 @@ interface AuthState {
   isAuthenticated: boolean
   error: string | null
   login: (email: string, password: string) => Promise<void>
-  register: (data: { name: string; email: string; password: string; role: string; phone?: number | string; registrationNumber?: string; courtDetails?: any }) => Promise<void>
+  register: (data: { name: string; email: string; password: string; role: string; phone?: number | string; registrationNumber?: string; pincode?: string; courtDetails?: any }) => Promise<void>
   verifyOtp: (identifier: string, code: string) => Promise<void>
   requestOtp: (identifier: string) => Promise<any>
   logout: () => void
@@ -32,10 +62,12 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authApi.login(email, password)
       // backend returns { user, accessToken, refreshToken }
       const { user, accessToken, refreshToken } = response.data
-      storage.setUserData(user)
+      // Merge organizationId (and any other JWT claims) onto the user object
+      const enrichedUser = mergeJwtClaims(user, accessToken)
+      storage.setUserData(enrichedUser)
       if (accessToken) storage.setAuthToken(accessToken)
       if (refreshToken) storage.setRefreshToken(refreshToken)
-      set({ user, token: accessToken ?? null, isAuthenticated: !!accessToken })
+      set({ user: enrichedUser, token: accessToken ?? null, isAuthenticated: !!accessToken })
     } catch (error: any) {
       set({ error: error.response?.data?.message || 'Login failed' })
       throw error
@@ -56,10 +88,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authApi.register(payload as any)
       // backend returns { user, accessToken, refreshToken }
       const { user, accessToken, refreshToken } = response.data
-      storage.setUserData({ id: user.id, role: user.role, })
+      const enrichedUser = mergeJwtClaims(user, accessToken)
+      storage.setUserData(enrichedUser)
       if (accessToken) storage.setAuthToken(accessToken)
       if (refreshToken) storage.setRefreshToken(refreshToken)
-      set({ user, token: accessToken ?? null, isAuthenticated: !!accessToken })
+      set({ user: enrichedUser, token: accessToken ?? null, isAuthenticated: !!accessToken })
     } catch (error: any) {
       set({ error: error.response?.data?.message || 'Registration failed' })
       throw error
@@ -74,10 +107,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       const response = await authApi.verifyOtp(identifier, code)
       // backend returns { user, accessToken, refreshToken }
       const { user, accessToken, refreshToken } = response.data
-      storage.setUserData(user)
+      const enrichedUser = mergeJwtClaims(user, accessToken)
+      storage.setUserData(enrichedUser)
       if (accessToken) storage.setAuthToken(accessToken)
       if (refreshToken) storage.setRefreshToken(refreshToken)
-      set({ user, token: accessToken ?? null, isAuthenticated: !!accessToken })
+      set({ user: enrichedUser, token: accessToken ?? null, isAuthenticated: !!accessToken })
     } catch (error: any) {
       set({ error: error.response?.data?.message || 'OTP verification failed' })
       throw error

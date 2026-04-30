@@ -15,10 +15,19 @@ const CourtAdminLayout: FC = () => {
     const navItems = [
         {
             to: '/court-admin/dashboard',
-            label: 'Dashboard',
+            label: 'Lawyer verifications',
             icon: (
                 <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                     <path d="M3 13h8V3H3v10zM3 21h8v-6H3v6zM13 21h8V11h-8v10zM13 3v6h8V3h-8z" fill="currentColor" />
+                </svg>
+            )
+        },
+        {
+            to: '/court-admin/organization-verifications',
+            label: 'Organization verifications',
+            icon: (
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M3 21V8l9-5 9 5v13H3zm6-2h6v-7H9v7z" fill="currentColor" />
                 </svg>
             )
         },

@@ -41,7 +41,9 @@ const AppLayout: FC = () => {
   const navigation = [
     { name: 'Home', path: '/app/home' },
     { name: 'Search Lawyers', path: '/app/search' },
+    { name: 'Law Firms', path: '/app/firms' },
     { name: 'Appointments', path: '/app/appointments' },
+    { name: 'Firm Requests', path: '/app/firms-requests' },
     { name: 'Cases', path: '/app/cases' },
     { name: 'Mediations', path: '/app/mediations' },
     { name: 'Call History', path: '/app/call-history' },

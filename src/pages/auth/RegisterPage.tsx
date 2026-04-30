@@ -28,6 +28,7 @@ const RegisterPage: FC = () => {
     phone: '',
     role: 'client',
     registrationNumber: '',
+    pincode: '',
   })
 
   const [courtDetails, setCourtDetails] = useState({
@@ -68,8 +69,14 @@ const RegisterPage: FC = () => {
           delete (detailsToSubmit as any).city;
         }
         payload.courtDetails = detailsToSubmit;
+        delete payload.pincode;
+      } else if (formData.role === 'organization') {
+        // Organization keeps registrationNumber + pincode
+        if (!payload.registrationNumber) delete payload.registrationNumber;
+        if (!payload.pincode) delete payload.pincode;
       } else {
         delete payload.registrationNumber;
+        delete payload.pincode;
       }
       await register(payload)
       // After successful registration, the backend automatically sends an OTP. Navigate directly to verification.
@@ -198,9 +205,41 @@ const RegisterPage: FC = () => {
               >
                 <option value="client">Client</option>
                 <option value="lawyer">Lawyer</option>
+                <option value="organization">Law Firm / Organization</option>
                 <option value="court_admin">Court Admin</option>
               </select>
             </div>
+
+            {formData.role === 'organization' && (
+              <div className="pt-4 border-t border-gray-200 space-y-4">
+                <h3 className="text-sm font-semibold text-gray-900">Law Firm Details</h3>
+                <p className="text-xs text-gray-500">Optional now — you can add these later in your profile.</p>
+                <div>
+                  <label htmlFor="org-registrationNumber" className="block text-sm font-medium text-gray-700">Registration Number (optional)</label>
+                  <input
+                    id="org-registrationNumber"
+                    name="registrationNumber"
+                    type="text"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm"
+                    value={formData.registrationNumber}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="org-pincode" className="block text-sm font-medium text-gray-700">Pincode (optional)</label>
+                  <input
+                    id="org-pincode"
+                    name="pincode"
+                    type="text"
+                    pattern="\d{6}"
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm"
+                    placeholder="6-digit pincode"
+                    value={formData.pincode}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+            )}
 
             {formData.role === 'court_admin' && (
               <div className="pt-4 border-t border-gray-200 space-y-4">

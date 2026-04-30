@@ -387,6 +387,105 @@ export const courtAdminApi = {
   getVerificationDocuments: (lawyerId: string) => api.get(`/court-admin/verify/${lawyerId}/documents`),
   verifyLawyer: (lawyerId: string, status: 'APPROVED' | 'REJECTED', remarks?: string) =>
     api.post(`/court-admin/verify/${lawyerId}`, { status, remarks }),
+
+  // Organization verification actions
+  getPendingOrgVerifications: () => api.get('/court-admin/organization-verifications/pending'),
+  getAllOrgVerifications: (params?: { statuses?: string; page?: number; limit?: number }) =>
+    api.get('/court-admin/organization-verifications', { params }),
+  verifyOrganization: (organizationId: string, status: 'APPROVED' | 'REJECTED', remarks?: string) =>
+    api.post(`/court-admin/verify-organization/${organizationId}`, { status, remarks }),
+}
+
+// ── Organization (law-firm) API ───────────────────────────────────────
+
+export interface OrgRegisterPayload {
+  role: 'ORGANIZATION'
+  name: string
+  email: string
+  phone: string
+  password: string
+  registrationNumber?: string
+  pincode?: string
+}
+
+export interface OrgUpdatePayload {
+  name?: string
+  email?: string
+  phone?: string
+  avatarUrl?: string
+  registrationNumber?: string | null
+  registrationCertUrl?: string | null
+  gstNumber?: string | null
+  gstProofUrl?: string | null
+  panNumber?: string | null
+  about?: string | null
+  website?: string | null
+  practiceAreas?: string[]
+  /** PAISE — frontend multiplies rupees by 100 before sending. */
+  consultationFee?: number | null
+  country?: string
+  state?: string
+  district?: string
+  city?: string
+  pincode?: string
+  address?: string
+  latitude?: number | null
+  longitude?: number | null
+}
+
+export interface OrgAddLawyerPayload {
+  name: string
+  email: string
+  phone: string
+  password: string
+  licenseNumber?: string
+  barCouncilId?: string
+  specializations?: string[]
+  feePerConsultation?: number
+  pincode?: string
+  city?: string
+  state?: string
+  bio?: string
+  experienceYears?: number
+}
+
+export const organizationsApi = {
+  // Public listing & profile
+  list: (params?: { pincode?: string; practiceArea?: string; verified?: boolean; page?: number; limit?: number }) =>
+    api.get('/organizations', { params }),
+  getById: (id: string) => api.get(`/organizations/${id}`),
+
+  // Org-self (auth: ORGANIZATION)
+  getMe: () => api.get('/organizations/me'),
+  updateMe: (data: OrgUpdatePayload) => api.put('/organizations/me', data),
+  getEligibleCourtAdmins: () => api.get('/organizations/me/eligible-court-admins'),
+  requestVerification: (courtAdminId: string) =>
+    api.post('/organizations/me/verification-request', { courtAdminId }),
+
+  // Lawyers managed by org
+  addLawyer: (data: OrgAddLawyerPayload) => api.post('/organizations/me/lawyers', data),
+  listLawyers: (params?: { page?: number; limit?: number }) =>
+    api.get('/organizations/me/lawyers', { params }),
+
+  // Appointment requests received by org
+  listAppointmentRequests: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/organizations/me/appointment-requests', { params }),
+  assignAppointmentRequest: (
+    id: string,
+    body: { lawyerId: string; paymentMethod: 'razorpay' | 'wallet' }
+  ) => api.post(`/organizations/me/appointment-requests/${id}/assign`, body),
+  rejectAppointmentRequest: (id: string, reason: string) =>
+    api.post(`/organizations/me/appointment-requests/${id}/reject`, { reason }),
+
+  // Client-facing
+  createAppointmentRequest: (
+    organizationId: string,
+    data: { scheduledAt: string; durationMins?: number; meetingType?: string; notes?: string }
+  ) => api.post(`/organizations/${organizationId}/appointment-requests`, data),
+  listMyRequests: (params?: { status?: string; page?: number; limit?: number }) =>
+    api.get('/organizations/clients/me/requests', { params }),
+  cancelMyRequest: (id: string) =>
+    api.post(`/organizations/clients/me/requests/${id}/cancel`),
 }
 
 export default api

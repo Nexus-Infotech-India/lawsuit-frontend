@@ -46,6 +46,8 @@ const LoginPage: FC = () => {
         navigate('/lawyer/dashboard', { replace: true })
       } else if (role === 'ADMIN') {
         navigate('/admin/dashboard', { replace: true })
+      } else if (role === 'ORGANIZATION') {
+        navigate('/organization/dashboard', { replace: true })
       } else {
         // default to client home
         navigate('/app/home', { replace: true })

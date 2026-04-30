@@ -1,7 +1,10 @@
 import { FC, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificationStore } from '@/stores/notificationStore'
+import { useAuthStore } from '@/stores/authStore'
 import NotificationItem from '@/components/atoms/NotificationItem'
+import { useOrganizationStore } from '@/stores/organizationStore'
+import { startOrgRequestRazorpayCheckout } from '@/services/orgPaymentFlow'
 import type { Notification } from '@/types'
 
 const NotificationModal: FC<{ open: boolean; onClose: () => void }> = ({ open, onClose }) => {
@@ -34,10 +37,63 @@ const NotificationModal: FC<{ open: boolean; onClose: () => void }> = ({ open, o
   }, [fetchNextPage])
 
   // Navigate based on notification type/data
-  const handleNotificationClick = (n: Notification) => {
-    const { data } = n
-    if (data.link) {
-      navigate(data.link)
+  const handleNotificationClick = async (n: Notification) => {
+    const { data, type } = n
+
+    // ── Organization (law-firm) flow ────────────────────────────────
+    if (type === 'ORGANIZATION_VERIFIED') {
+      navigate('/organization/dashboard')
+      onClose()
+      return
+    }
+    if (type === 'ORGANIZATION_REJECTED') {
+      navigate('/organization/verification')
+      onClose()
+      return
+    }
+    if (type === 'ORG_APPOINTMENT_REQUEST_RECEIVED') {
+      navigate('/organization/requests')
+      onClose()
+      return
+    }
+    if (type === 'ORG_APPOINTMENT_REQUEST_REJECTED') {
+      navigate('/app/firms-requests')
+      onClose()
+      return
+    }
+    if (type === 'ORG_APPOINTMENT_REQUEST_ASSIGNED') {
+      // Fetch the request, find the matching one (by id) so we can open Razorpay.
+      try {
+        await useOrganizationStore.getState().fetchMyRequests()
+        const requestId = data.requestId
+        const req = useOrganizationStore.getState().myRequests.find((r) => r.id === requestId)
+        const user = useAuthStore.getState().user
+        if (req) {
+          await startOrgRequestRazorpayCheckout({
+            request: req,
+            prefill: {
+              name: user?.name,
+              email: (user as any)?.email,
+              contact: String((user as any)?.phone ?? ''),
+            },
+            onSuccess: () => {
+              useOrganizationStore.getState().fetchMyRequests().catch(() => { })
+            },
+          })
+        } else {
+          // Fall back to navigation if we can't find the request
+          navigate('/app/firms-requests')
+        }
+      } catch {
+        navigate('/app/firms-requests')
+      }
+      onClose()
+      return
+    }
+
+    // ── Existing flows ──────────────────────────────────────────────
+    if (type === 'NEW_MESSAGE' && data.chatId) {
+      navigate(`/app/chat/${data.chatId}`)
     } else if (data.appointmentId) {
       navigate(`/app/appointments`)
     } else if (data.caseId) {
