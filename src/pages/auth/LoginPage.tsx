@@ -65,24 +65,30 @@ const LoginPage: FC = () => {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
             Sign in to your account
           </h2>
-          <div className="mt-4 flex justify-center gap-4">
-            <Button
-              variant="primary"
-              size="sm"
-              className="pointer-events-none opacity-100 bg-primary"
-            >
-              Client / Lawyer
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-gray-600 hover:text-primary hover:bg-gray-100"
-              onClick={() => navigate('/auth/court-admin-login')}
+          <div className="mt-4 inline-flex w-full rounded-lg bg-gray-100 p-1 text-sm font-medium">
+            <button
               type="button"
+              aria-pressed="true"
+              className="flex-1 px-3 py-1.5 rounded-md bg-white text-primary shadow-sm"
+              title="Clients, lawyers, and law firms all sign in here"
+            >
+              Client / Lawyer / Law Firm
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/auth/court-admin-login')}
+              className="flex-1 px-3 py-1.5 rounded-md text-gray-600 hover:text-primary hover:bg-white/60"
             >
               Court Admin
-            </Button>
+            </button>
           </div>
+          <p className="mt-2 text-center text-xs text-gray-500">
+            Law firms: sign in with the email used while registering. New firm?{' '}
+            <Link to="/auth/register" className="text-primary hover:text-primary-dark font-medium">
+              Register your firm
+            </Link>
+            .
+          </p>
           <p className="mt-4 text-center text-sm text-gray-600">
             Or{' '}
             <Link to="/auth/register" className="font-medium text-primary hover:text-primary-dark">
