@@ -128,7 +128,10 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
     set({ loadingCourtAdmins: true })
     try {
       const res = await organizationsApi.getEligibleCourtAdmins()
-      set({ eligibleCourtAdmins: res.data?.items || res.data || [] })
+      // Backend returns { courtAdmins: [...] }. Without this, the bare `res.data`
+      // fallback assigns the whole object and downstream `.map` blanks the page.
+      const list = res.data?.courtAdmins ?? res.data?.items ?? (Array.isArray(res.data) ? res.data : [])
+      set({ eligibleCourtAdmins: list })
     } catch {
       set({ eligibleCourtAdmins: [] })
     } finally {
