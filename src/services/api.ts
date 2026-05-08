@@ -539,6 +539,43 @@ export const videoApi = {
 
 export const storageApi = {
   getPresignedUrl: `${baseURL}/storage/presigned`,
+  // GET /storage/sign?folder=documents|profiles|lawyer-applications
+  // Returns Cloudinary signed upload params: { timestamp, signature, cloudName, apiKey, folder }
+  getSignature: (folder: 'documents' | 'profiles' | 'lawyer-applications' = 'lawyer-applications') =>
+    api.get('/storage/sign', { params: { folder } }),
+}
+
+export const organizationsApi = {
+  // Org self-service
+  getMe: () => api.get('/organizations/me'),
+  updateMe: (payload: Partial<{
+    name: string
+    phone: string
+    avatarUrl: string
+    registrationNumber: string
+    registrationCertUrl: string
+    gstNumber: string
+    gstProofUrl: string
+    panNumber: string
+    about: string
+    website: string
+    practiceAreas: string[]
+    consultationFee: number
+    country: string
+    state: string
+    district: string
+    city: string
+    pincode: string
+    address: string
+    latitude: number
+    longitude: number
+    fcmToken: string
+  }>) => api.put('/organizations/me', payload),
+
+  // Verification
+  getEligibleCourtAdmins: () => api.get('/organizations/me/eligible-court-admins'),
+  requestVerification: (courtAdminId: string) =>
+    api.post('/organizations/me/verification-request', { courtAdminId }),
 }
 
 export const teleLawApi = {

@@ -96,8 +96,6 @@ import FirmsListPage from './pages/app/firms/FirmsListPage'
 import FirmDetailPage from './pages/app/firms/FirmDetailPage'
 import MyFirmRequestsPage from './pages/app/firms/MyFirmRequestsPage'
 
-
-
 // Resolve the user's role with a localStorage fallback. Other stores
 // (userStore, courtAdminStore) write to authStore.user via setState, so the
 // in-memory value can flip briefly during a render. Storage is the canonical

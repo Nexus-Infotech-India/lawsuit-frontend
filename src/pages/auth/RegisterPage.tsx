@@ -112,7 +112,7 @@ const RegisterPage: FC = () => {
           <div className="rounded-md shadow-sm space-y-4">
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                Full Name
+                {formData.role === 'organization' ? 'Law Firm Name' : 'Full Name'}
               </label>
               <input
                 id="name"
@@ -120,7 +120,7 @@ const RegisterPage: FC = () => {
                 type="text"
                 required
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-primary focus:border-primary sm:text-sm"
-                placeholder="John Doe"
+                placeholder={formData.role === 'organization' ? 'Khanna & Associates LLP' : 'John Doe'}
                 value={formData.name}
                 onChange={handleChange}
               />
