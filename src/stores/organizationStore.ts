@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { organizationsApi, courtAdminApi } from '@/services/api'
+import { friendlyError } from '@/utils/errors'
 import type {
   Organization,
   OrgAppointmentRequest,
@@ -104,7 +105,7 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
       const org: Organization = res.data?.organization || res.data
       set({ me: org })
     } catch (err: any) {
-      set({ errorMe: err?.response?.data?.message || 'Failed to load organization profile' })
+      set({ errorMe: friendlyError(err, "We couldn't load your organization profile.") })
     } finally {
       set({ loadingMe: false })
     }
@@ -117,7 +118,7 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
       const org: Organization = res.data?.organization || res.data
       set({ me: org })
     } catch (err: any) {
-      set({ errorMe: err?.response?.data?.message || err?.response?.data?.error || 'Failed to update profile' })
+      set({ errorMe: friendlyError(err, "We couldn't save your profile changes.") })
       throw err
     } finally {
       set({ loadingMe: false })

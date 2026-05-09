@@ -2,6 +2,7 @@ import { FC, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Calendar, Clock, FileText, MessageSquare, User, Video, Upload, RefreshCw, XCircle, ChevronDown, ChevronUp, Check, X, CheckCircle2 } from 'lucide-react'
 import AppointmentDiscussionPanel from '@/components/organisms/AppointmentDiscussionPanel'
+import EkycVerifiedBadge from '@/components/atoms/EkycVerifiedBadge'
 import { appointmentsExtApi } from '@/services/api'
 
 interface AppointmentData {
@@ -20,6 +21,8 @@ interface AppointmentData {
     phone: string;
     name: string;
     avatarUrl: string | null;
+    /** Optional — surfaced as a verified badge next to the client's name. */
+    ekycVerified?: boolean;
   };
   lawyer: {
     id: string;
@@ -168,19 +171,22 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
               )}
             </div>
             <div>
-              {otherParty?.id ? (
-                <Link
-                  to={`/lawyer/client/${otherParty.id}`}
-                  className="text-base font-medium text-primary hover:underline"
-                  title="View client history"
-                >
-                  {otherParty.name || 'Unknown'}
-                </Link>
-              ) : (
-                <h3 className="text-base font-medium text-primary">
-                  {otherParty?.name || 'Unknown'}
-                </h3>
-              )}
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {otherParty?.id ? (
+                  <Link
+                    to={`/lawyer/client/${otherParty.id}`}
+                    className="text-base font-medium text-primary hover:underline"
+                    title="View client history"
+                  >
+                    {otherParty.name || 'Unknown'}
+                  </Link>
+                ) : (
+                  <h3 className="text-base font-medium text-primary">
+                    {otherParty?.name || 'Unknown'}
+                  </h3>
+                )}
+                <EkycVerifiedBadge verified={otherParty?.ekycVerified} />
+              </div>
               <p className="text-sm text-secondary">{otherParty?.email}</p>
             </div>
           </div>

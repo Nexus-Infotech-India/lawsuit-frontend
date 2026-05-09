@@ -8,6 +8,7 @@ import Button from '@/components/atoms/Button'
 import ClientInfo from '@/components/molecules/ClientInfo'
 import DangerZone from '@/components/molecules/DangerZone'
 import EkycStatusCard from '@/components/molecules/EkycStatusCard'
+import EkycVerifiedBadge from '@/components/atoms/EkycVerifiedBadge'
 
 const ProfilePage: FC = () => {
   const navigate = useNavigate()
@@ -180,8 +181,9 @@ const ProfilePage: FC = () => {
           )}
 
           <div className="mt-4 text-center">
-            <div className="flex items-center gap-2 justify-center">
+            <div className="flex items-center gap-2 justify-center flex-wrap">
               <h2 className="text-xl font-semibold">{user?.name || 'Your Name'}</h2>
+              <EkycVerifiedBadge verified={(user as any)?.ekycVerified} />
             </div>
             <p className="text-sm text-gray-500">{user?.email}</p>
           </div>

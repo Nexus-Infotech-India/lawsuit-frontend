@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { agreementTemplatesApi } from '@/services/api'
 import { AgreementTemplate } from '@/types'
+import { friendlyError } from '@/utils/errors'
 
 interface AgreementTemplateState {
     templates: AgreementTemplate[]
@@ -25,7 +26,7 @@ export const useAgreementTemplateStore = create<AgreementTemplateState>((set, ge
             const data = res.data?.data ?? res.data ?? []
             set({ templates: Array.isArray(data) ? data : [], loading: false })
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'Failed to fetch templates'
+            const msg = friendlyError(err, "We couldn't load your agreement templates.")
             set({ error: msg, loading: false })
             throw err
         }
@@ -39,7 +40,7 @@ export const useAgreementTemplateStore = create<AgreementTemplateState>((set, ge
             set((state) => ({ templates: [template, ...state.templates], loading: false }))
             return template
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'Failed to create template'
+            const msg = friendlyError(err, "We couldn't create that template.")
             set({ error: msg, loading: false })
             throw err
         }
@@ -56,7 +57,7 @@ export const useAgreementTemplateStore = create<AgreementTemplateState>((set, ge
             }))
             return updated
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'Failed to update template'
+            const msg = friendlyError(err, "We couldn't save those changes.")
             set({ error: msg, loading: false })
             throw err
         }
@@ -71,7 +72,7 @@ export const useAgreementTemplateStore = create<AgreementTemplateState>((set, ge
                 loading: false,
             }))
         } catch (err: any) {
-            const msg = err?.response?.data?.message || err.message || 'Failed to delete template'
+            const msg = friendlyError(err, "We couldn't delete that template.")
             set({ error: msg, loading: false })
             throw err
         }

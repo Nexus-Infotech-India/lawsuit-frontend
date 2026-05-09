@@ -6,7 +6,11 @@
       "Bash(npx tsc *)",
       "Bash(echo \"EXIT=$?\")",
       "Bash(Get-ChildItem -Path \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-server/src/routes\" -Filter \"*.routes.ts\" -Recurse)",
-      "Bash(Select-Object FullName)"
+      "Bash(Select-Object FullName)",
+      "Bash(grep -nE \"error: [^|]*\\\\|\\\\|.*'[^']+'|setError\\\\\\(.*data\\\\?\\\\.|response\\\\?\\\\.data\\\\?\\\\.|\\\\\\\\.message\\\\\\\\s*\\\\\\\\|\\\\\\\\|\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/walletStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/lawyerStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/notificationStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/appointmentStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/organizationStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/agreementTemplateStore.ts\" \"C:/Users/chand/OneDrive/Desktop/NexusWS/NyayaX/lawsuit-frontend/src/stores/videoCallStore.ts\")",
+      "Bash(echo \"TS_EXIT=$?\")",
+      "Bash(npx vite *)",
+      "Bash(echo \"BUILD_EXIT=$?\")"
     ]
   }
 }

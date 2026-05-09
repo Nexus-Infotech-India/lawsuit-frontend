@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { courtAdminApi } from '@/services/api';
 import storage from '@/utils/storage';
+import { friendlyError } from '@/utils/errors';
 import type { User } from '@/types';
 
 export interface VerificationRequest {
@@ -65,7 +66,7 @@ export const useCourtAdminStore = create<CourtAdminState>((set, get) => ({
             if (refreshToken) storage.setRefreshToken(refreshToken);
             set({ user, token: accessToken ?? null, isAuthenticated: true });
         } catch (error: any) {
-            set({ error: error.response?.data?.message || error.message || 'Login failed' });
+            set({ error: friendlyError(error, "We couldn't sign you in. Please check your details and try again.") });
             throw error;
         } finally {
             set({ isLoading: false });
@@ -83,7 +84,7 @@ export const useCourtAdminStore = create<CourtAdminState>((set, get) => ({
             const response = await courtAdminApi.getPendingVerifications();
             set({ pendingVerifications: response.data.items || [] });
         } catch (error: any) {
-            set({ error: error.response?.data?.message || 'Failed to fetch pending requests' });
+            set({ error: friendlyError(error, "We couldn't load pending verification requests.") });
             throw error;
         } finally {
             set({ isLoading: false });
@@ -96,7 +97,7 @@ export const useCourtAdminStore = create<CourtAdminState>((set, get) => ({
             const response = await courtAdminApi.getAllVerifications();
             set({ allVerifications: response.data.items || [] });
         } catch (error: any) {
-            set({ error: error.response?.data?.message || 'Failed to fetch all requests' });
+            set({ error: friendlyError(error, "We couldn't load verification history.") });
             throw error;
         } finally {
             set({ isLoading: false });
@@ -113,7 +114,7 @@ export const useCourtAdminStore = create<CourtAdminState>((set, get) => ({
             // Refresh all verifications to reflect new status
             get().fetchAllVerifications();
         } catch (error: any) {
-            set({ error: error.response?.data?.message || 'Failed to verify lawyer' });
+            set({ error: friendlyError(error, "We couldn't update this verification. Please try again.") });
             throw error;
         } finally {
             set({ isLoading: false });

@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { usersApi, authApi } from '@/services/api'
 import storage from '@/utils/storage'
 import { useAuthStore } from '@/stores/authStore'
+import { friendlyError } from '@/utils/errors'
 
 interface UserStore {
   user: any | null
@@ -29,7 +30,7 @@ export const useUserStore = create<UserStore>((set) => ({
         set({ user: u })
       }
     } catch (err: any) {
-      set({ error: err?.response?.data?.error || err.message || 'Failed to load user' })
+      set({ error: friendlyError(err, "We couldn't load your profile. Please try again.") })
     } finally {
       set({ loading: false })
     }
@@ -46,7 +47,7 @@ export const useUserStore = create<UserStore>((set) => ({
         set({ user: u })
       }
     } catch (err: any) {
-      set({ error: err?.response?.data?.error || err.message || 'Failed to update user' })
+      set({ error: friendlyError(err, "We couldn't save your profile changes.") })
       throw err
     } finally {
       set({ loading: false })
@@ -58,7 +59,7 @@ export const useUserStore = create<UserStore>((set) => ({
     try {
       await authApi.requestOtp(identifier)
     } catch (err: any) {
-      set({ error: err?.response?.data?.error || err.message || 'Failed to request verification' })
+      set({ error: friendlyError(err, "We couldn't send a verification code right now.") })
       throw err
     } finally {
       set({ loading: false })
@@ -78,7 +79,7 @@ export const useUserStore = create<UserStore>((set) => ({
         set({ user: u })
       }
     } catch (err: any) {
-      set({ error: err?.response?.data?.error || err.message || 'Verification failed' })
+      set({ error: friendlyError(err, "That code didn't work. Double-check and try again.") })
       throw err
     } finally {
       set({ loading: false })

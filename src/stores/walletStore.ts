@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { WalletTransaction } from '@/types'
 import { walletApi } from '@/services/api'
+import { friendlyError } from '@/utils/errors'
 
 interface WalletState {
   balance: number
@@ -65,7 +66,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Return the response body directly — avoid over-unwrapping that can lose fields
       return res.data
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Failed to initiate top-up'
+      const msg = friendlyError(err, "We couldn't start the top-up. Please try again.")
       set({ error: msg })
       throw new Error(msg)
     } finally {
@@ -83,7 +84,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }
       return data
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Failed to confirm payment'
+      const msg = friendlyError(err, "Your payment went through but we couldn't confirm it. Please contact support.")
       set({ error: msg })
       throw new Error(msg)
     } finally {
@@ -104,7 +105,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       get().fetchTransactions(1)
       return { success: true }
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Withdrawal failed'
+      const msg = friendlyError(err, "We couldn't process your withdrawal right now.")
       set({ error: msg })
       return { success: false, message: msg }
     } finally {
@@ -124,7 +125,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       get().fetchTransactions(1)
       return { success: true, balance: data.balance }
     } catch (err: any) {
-      const msg = err.response?.data?.error || err.message || 'Transfer failed'
+      const msg = friendlyError(err, "We couldn't complete that transfer.")
       set({ error: msg })
       return { success: false, message: msg }
     } finally {
