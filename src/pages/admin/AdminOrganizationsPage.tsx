@@ -30,6 +30,21 @@ interface OrgRow {
   practiceAreas?: string[]
   consultationFee?: number | null
   _count?: { lawyers?: number }
+  /**
+   * Active lawyer roster (server returns up to 50, banned/deleted excluded).
+   * Only present on the detail response, not on the list response.
+   */
+  lawyers?: Array<{
+    id: string
+    name?: string | null
+    email?: string | null
+    phone?: string | null
+    avatarUrl?: string | null
+    isVerified?: boolean
+    specializations?: string[] | null
+    experienceYears?: number | null
+    feePerConsultation?: number | null
+  }>
 }
 
 type FilterMode = 'all' | 'verified' | 'unverified' | 'banned' | 'deleted'
@@ -354,6 +369,75 @@ const OrgDetailDrawer: FC<{ id: string; onClose: () => void }> = ({ id, onClose 
                 )}
               </Section>
             )}
+
+            {/* Lawyers under this firm */}
+            <Section title={`Lawyers (${org._count?.lawyers ?? org.lawyers?.length ?? 0})`}>
+              {!org.lawyers || org.lawyers.length === 0 ? (
+                <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
+                  No lawyers on the roster yet.
+                </div>
+              ) : (
+                <ul className="space-y-2">
+                  {org.lawyers.map((l) => (
+                    <li
+                      key={l.id}
+                      className="flex items-center gap-3 border border-gray-100 rounded-lg px-3 py-2 bg-white"
+                    >
+                      {l.avatarUrl ? (
+                        <img
+                          src={l.avatarUrl}
+                          alt=""
+                          className="w-9 h-9 rounded-full object-cover bg-gray-100 flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-sm font-semibold flex-shrink-0">
+                          {(l.name || '?').charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-900 truncate">
+                            {l.name || 'Unnamed'}
+                          </span>
+                          {l.isVerified && (
+                            <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                              <BadgeCheck className="w-2.5 h-2.5" /> Verified
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] text-gray-500 truncate">
+                          {l.email || l.phone || '—'}
+                        </div>
+                        {(l.specializations?.length || l.experienceYears != null || l.feePerConsultation != null) && (
+                          <div className="text-[11px] text-gray-400 truncate">
+                            {l.specializations?.slice(0, 2).join(', ')}
+                            {l.experienceYears != null
+                              ? `${l.specializations?.length ? ' · ' : ''}${l.experienceYears} yrs`
+                              : ''}
+                            {l.feePerConsultation != null
+                              ? ` · ${fmtCurrency((l.feePerConsultation as number) * 100)}/consult`
+                              : ''}
+                          </div>
+                        )}
+                      </div>
+                      <Link
+                        to={`/admin/lawyers?id=${l.id}`}
+                        onClick={onClose}
+                        className="text-xs text-indigo-600 hover:text-indigo-700 font-medium flex-shrink-0"
+                      >
+                        Open ↗
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {(org._count?.lawyers ?? 0) > (org.lawyers?.length ?? 0) && (
+                <p className="text-[11px] text-gray-400 mt-2">
+                  Showing {org.lawyers?.length ?? 0} of {org._count?.lawyers ?? 0} — open Lawyers
+                  page for the full roster.
+                </p>
+              )}
+            </Section>
 
             {/* Stats */}
             <Section title="Activity">
