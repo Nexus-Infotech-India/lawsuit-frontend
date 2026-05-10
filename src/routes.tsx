@@ -10,6 +10,9 @@ import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/auth/LoginPage'
 import AdminLoginPage from './pages/auth/AdminLoginPage'
 import RegisterPage from './pages/auth/RegisterPage'
+import ChangePasswordPage from './pages/auth/ChangePasswordPage'
+import ForgotPasswordPage from './pages/auth/ForgotPasswordPage'
+import CourtAdminRegisterPage from './pages/auth/CourtAdminRegisterPage'
 import OtpVerifyPage from './pages/auth/OtpVerifyPage'
 import PrivacyPolicyPage from './pages/PrivacyPolicyPage'
 import TermsOfServicePage from './pages/TermsOfServicePage'
@@ -52,6 +55,7 @@ import AdminSalaryPage from './pages/admin/AdminSalaryPage'
 import AdminCourtsPage from './pages/admin/AdminCourtsPage'
 import AdminTeamPage from './pages/admin/AdminTeamPage'
 import AdminWalletsPage from './pages/admin/AdminWalletsPage'
+import AdminBankAccountsPage from './pages/admin/AdminBankAccountsPage'
 import AdminAnnouncementsPage from './pages/admin/AdminAnnouncementsPage'
 import AdminLawyersPage from './pages/admin/AdminLawyersPage'
 import AdminOrganizationsPage from './pages/admin/AdminOrganizationsPage'
@@ -98,6 +102,10 @@ import OrganizationLawyersPage from './pages/organization/OrganizationLawyersPag
 import OrganizationRequestsPage from './pages/organization/OrganizationRequestsPage'
 import OrganizationVerificationPage from './pages/organization/OrganizationVerificationPage'
 import OrganizationSalaryPage from './pages/organization/OrganizationSalaryPage'
+import OrganizationMySalaryPage from './pages/organization/OrganizationMySalaryPage'
+// Shared (Client + Lawyer): standalone chat list and document AI workspace
+import ChatListPage from './pages/shared/ChatListPage'
+import DocumentAiPage from './pages/shared/DocumentAiPage'
 
 // Client-side firm discovery
 import FirmsListPage from './pages/app/firms/FirmsListPage'
@@ -122,8 +130,15 @@ function useEffectiveRole(): string | undefined {
 
 // Protected Route Component
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { isAuthenticated } = useAuthStore()
-  return isAuthenticated ? <>{children}</> : <Navigate to="/auth/login" replace />
+  const { isAuthenticated, user } = useAuthStore()
+  if (!isAuthenticated) return <Navigate to="/auth/login" replace />
+  // Forced-rotation guard: server flags admin-invited / reset accounts with
+  // `mustChangePassword=true`. We bounce them to the change-password screen
+  // until they rotate their password (which clears the flag server-side).
+  if ((user as any)?.mustChangePassword) {
+    return <Navigate to="/auth/change-password?force=1" replace />
+  }
+  return <>{children}</>
 }
 
 const CourtAdminProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -144,7 +159,13 @@ const AppRoutes = () => {
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/admin-login" element={<AdminLoginPage />} />
       <Route path="/auth/court-admin-login" element={<CourtAdminLoginPage />} />
+      <Route path="/auth/court-admin-register" element={<CourtAdminRegisterPage />} />
       <Route path="/auth/register" element={<RegisterPage />} />
+      <Route path="/auth/forgot-password" element={<ForgotPasswordPage />} />
+      {/* Change password route — accessible while authenticated. The
+          ProtectedRoute guard auto-redirects users with `mustChangePassword`
+          here with `?force=1`, so we don't wrap this route in it. */}
+      <Route path="/auth/change-password" element={<ChangePasswordPage />} />
       <Route path="/auth/otp-verify" element={<OtpVerifyPage />} />
       <Route path="/privacy-policy" element={<PrivacyPolicyPage />} />
       <Route path="/terms-of-service" element={<TermsOfServicePage />} />
@@ -233,6 +254,12 @@ const AppRoutes = () => {
         <Route path="firms/:id" element={<FirmDetailPage />} />
         <Route path="firms-requests" element={<MyFirmRequestsPage />} />
 
+        {/* Standalone chat list + document AI (mobile-app parity) */}
+        <Route path="chats" element={<ChatListPage />} />
+        <Route path="document-ai" element={
+          <EkycGuard action="use Document AI"><DocumentAiPage /></EkycGuard>
+        } />
+
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
       </Route>
 
@@ -254,6 +281,8 @@ const AppRoutes = () => {
         <Route path="profile" element={<OrganizationProfilePage />} />
         <Route path="lawyers" element={<OrganizationLawyersPage />} />
         <Route path="salary" element={<OrganizationSalaryPage />} />
+        {/* Org head's own performance-salary view (paid by the platform) */}
+        <Route path="my-salary" element={<OrganizationMySalaryPage />} />
         <Route path="requests" element={<OrganizationRequestsPage />} />
         <Route path="verification" element={<OrganizationVerificationPage />} />
       </Route>
@@ -285,6 +314,7 @@ const AppRoutes = () => {
         <Route path="courts" element={<AdminCourtsPage />} />
         <Route path="team" element={<AdminTeamPage />} />
         <Route path="wallets" element={<AdminWalletsPage />} />
+        <Route path="bank-accounts" element={<AdminBankAccountsPage />} />
         <Route path="announcements" element={<AdminAnnouncementsPage />} />
 
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
@@ -334,6 +364,9 @@ const AppRoutes = () => {
         <Route path="report-issue" element={<ReportIssuePage />} />
         <Route path="legal-updates" element={<LegalUpdatesPage />} />
         <Route path="payments" element={<PaymentHistoryPage />} />
+        {/* Standalone chat list + document AI workspace (mobile-app parity) */}
+        <Route path="chats" element={<ChatListPage />} />
+        <Route path="document-ai" element={<DocumentAiPage />} />
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
       </Route>
 

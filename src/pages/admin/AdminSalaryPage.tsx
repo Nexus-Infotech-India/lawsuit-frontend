@@ -249,6 +249,16 @@ const AdminSalaryPage: FC = () => {
         ))}
       </div>
 
+      {tab === 'lawyers' && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800 flex items-start gap-2">
+          <span className="font-semibold">Note:</span>
+          <span>
+            Only <strong>platform-managed lawyers</strong> appear here. Org-affiliated lawyers are paid by
+            their organization and managed by the org head from <em>/organization/salary</em>.
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />

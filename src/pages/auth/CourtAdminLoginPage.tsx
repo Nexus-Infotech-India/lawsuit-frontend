@@ -1,5 +1,5 @@
 import { FC, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useCourtAdminStore } from '../../stores/courtAdminStore';
 
 const CourtAdminLoginPage: FC = () => {
@@ -85,6 +85,15 @@ const CourtAdminLoginPage: FC = () => {
                         >
                             {isLoading ? 'Signing in...' : 'Sign in'}
                         </button>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm pt-2">
+                        <Link to="/auth/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-700">
+                            Forgot password?
+                        </Link>
+                        <Link to="/auth/court-admin-register" className="font-medium text-indigo-600 hover:text-indigo-700">
+                            Create an account
+                        </Link>
                     </div>
                 </form>
             </div>

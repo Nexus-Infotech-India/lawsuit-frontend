@@ -142,6 +142,10 @@ export const authApi = {
   restorePassword: (payload: { identifier: string; code: string; password: string }) => api.put('/auth/restore-password', payload),
   refresh: (refreshToken: string) => api.post('/auth/refresh', { refreshToken }),
   logout: (refreshToken: string) => api.post('/auth/logout', { refreshToken }),
+  // Authenticated change-password — also clears server-side
+  // `mustChangePassword` flag, unblocking the forced-rotation guard.
+  changePassword: (currentPassword: string, newPassword: string) =>
+    api.post('/auth/change-password', { currentPassword, newPassword }),
 }
 
 export const lawyersApi = {
@@ -240,6 +244,10 @@ export const usersApi = {
 }
 
 export const chatApi = {
+  // Returns the user's WhatsApp-style conversation list — one row per
+  // counterpart, with last message and unread count rolled up server-side.
+  // Backed by `GET /chat` → `chat.controller.listChats`.
+  listChats: () => api.get('/chat'),
   createChat: (payload: { otherUserId: string; caseId?: string | null }) => api.post('/chat', payload),
   getMessages: (chatId: string, params?: { page?: number; limit?: number }) => api.get(`/chat/${chatId}/messages`, { params }),
   sendMessage: (chatId: string, data: { text?: string; attachments?: string[] }) =>
@@ -338,7 +346,11 @@ export const adminApi = {
     api.post(`/admin/payouts/${id}/dispute/resolve`, payload),
 
   // Court admin authorization (SUPER_ADMIN)
-  listPendingCourtAdmins: () => api.get('/admin/court-admins/pending'),
+  listPendingCourtAdmins: (params?: {
+    page?: number
+    limit?: number
+    verificationStatus?: 'PENDING_SUPER_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED'
+  }) => api.get('/admin/court-admins/pending', { params }),
   getCourtAdminDetail: (id: string) => api.get(`/admin/court-admins/${id}`),
   approveCourtAdmin: (id: string, remarks?: string) =>
     api.post(`/admin/court-admins/${id}/approve`, { remarks }),

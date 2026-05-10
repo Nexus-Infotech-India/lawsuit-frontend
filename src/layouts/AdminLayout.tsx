@@ -46,7 +46,8 @@ const SECTIONS: NavSection[] = [
     items: [
       { to: '/admin/payouts', label: 'Payouts & Escrow', icon: Banknote },
       { to: '/admin/salary', label: 'Salary', icon: Coins },
-      { to: '/admin/wallets', label: 'Wallets', icon: Wallet },
+      { to: '/admin/wallets', label: 'Platform Wallet', icon: Wallet },
+      { to: '/admin/bank-accounts', label: 'Bank Accounts', icon: Building2 },
     ],
   },
   {

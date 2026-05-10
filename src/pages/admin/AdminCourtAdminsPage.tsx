@@ -53,10 +53,14 @@ const fmt = (n?: number | null) =>
 const fmtPct = (r: number | null | undefined) =>
   r == null ? '—' : `${Math.round(r * 100)}%`
 
+type Tab = 'pending' | 'approved' | 'rejected' | 'team'
+
 const AdminCourtAdminsPage: FC = () => {
-  const [tab, setTab] = useState<'team' | 'pending'>('pending')
+  const [tab, setTab] = useState<Tab>('pending')
   const [team, setTeam] = useState<CourtAdmin[]>([])
   const [pending, setPending] = useState<CourtAdmin[]>([])
+  const [approved, setApproved] = useState<CourtAdmin[]>([])
+  const [rejected, setRejected] = useState<CourtAdmin[]>([])
   const [loading, setLoading] = useState(true)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [openId, setOpenId] = useState<string | null>(null)
@@ -70,12 +74,25 @@ const AdminCourtAdminsPage: FC = () => {
   const load = async () => {
     setLoading(true)
     try {
-      if (tab === 'pending') {
-        const res = await adminApi.listPendingCourtAdmins()
-        setPending(unwrapList<CourtAdmin>(res.data))
-      } else {
+      if (tab === 'team') {
         const res = await adminCourtApi.listCourtAdmins({ limit: 100 })
         setTeam(unwrapList<CourtAdmin>(res.data))
+      } else {
+        // The first three tabs are all served by /admin/court-admins/pending
+        // — the server filters by `verificationStatus` query param. This
+        // matches the mobile SuperAdminCourtAdminApprovalsScreen flow exactly
+        // (Pending → live queue, Approved/Rejected → audit history).
+        const verificationStatus =
+          tab === 'pending'
+            ? 'PENDING_SUPER_ADMIN_APPROVAL'
+            : tab === 'approved'
+              ? 'APPROVED'
+              : 'REJECTED'
+        const res = await adminApi.listPendingCourtAdmins({ verificationStatus, limit: 100 })
+        const list = unwrapList<CourtAdmin>(res.data)
+        if (tab === 'pending') setPending(list)
+        else if (tab === 'approved') setApproved(list)
+        else setRejected(list)
       }
     } catch (err) {
       showToast(friendlyError(err, "We couldn't load the court admin list."), 'error')
@@ -131,7 +148,8 @@ const AdminCourtAdminsPage: FC = () => {
     }
   }
 
-  const list = tab === 'pending' ? pending : team
+  const list =
+    tab === 'pending' ? pending : tab === 'approved' ? approved : tab === 'rejected' ? rejected : team
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -145,15 +163,17 @@ const AdminCourtAdminsPage: FC = () => {
         </div>
       </div>
 
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-gray-200 overflow-x-auto">
         {[
           { id: 'pending', label: 'Pending approval' },
+          { id: 'approved', label: 'Approved' },
+          { id: 'rejected', label: 'Rejected' },
           { id: 'team', label: 'Active team' },
         ].map((t) => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id as any)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${tab === t.id
+            onClick={() => setTab(t.id as Tab)}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t.id
               ? 'border-indigo-600 text-indigo-600'
               : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
@@ -170,7 +190,13 @@ const AdminCourtAdminsPage: FC = () => {
       ) : list.length === 0 ? (
         <div className="bg-white border border-gray-100 rounded-xl p-12 text-center text-gray-500">
           <Users className="w-10 h-10 mx-auto text-gray-300 mb-2" />
-          {tab === 'pending' ? 'No pending applications.' : 'No active court admins.'}
+          {tab === 'pending'
+            ? 'No pending applications.'
+            : tab === 'approved'
+              ? 'No approved applications yet.'
+              : tab === 'rejected'
+                ? 'No rejected applications.'
+                : 'No active court admins.'}
         </div>
       ) : (
         <div className="space-y-3">
@@ -222,7 +248,7 @@ const AdminCourtAdminsPage: FC = () => {
                         <X className="w-4 h-4" /> Reject
                       </button>
                     </div>
-                  ) : (
+                  ) : tab === 'team' ? (
                     <div className="flex items-center gap-2 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={c.status || 'ACTIVE'}
@@ -235,6 +261,20 @@ const AdminCourtAdminsPage: FC = () => {
                         <option value="SUSPENDED">Suspended</option>
                       </select>
                       <ChevronRight className="w-4 h-4 text-gray-300" />
+                    </div>
+                  ) : (
+                    // Approved / Rejected — read-only audit history. Match
+                    // mobile by surfacing a status pill instead of actions.
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span
+                        className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          tab === 'approved'
+                            ? 'bg-green-50 text-green-700 border-green-100'
+                            : 'bg-red-50 text-red-700 border-red-100'
+                        }`}
+                      >
+                        {tab === 'approved' ? 'Approved' : 'Rejected'}
+                      </span>
                     </div>
                   )}
                 </div>

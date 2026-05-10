@@ -38,14 +38,15 @@ const LawyerLayout: FC = () => {
     { name: 'Dashboard', path: '/lawyer/dashboard' },
     { name: 'Appointments', path: '/lawyer/appointments' },
     { name: 'Cases', path: '/lawyer/cases' },
+    { name: 'Chats', path: '/lawyer/chats' },
     { name: 'Mediations', path: '/lawyer/mediations' },
     { name: 'Call History', path: '/lawyer/call-history' },
+    { name: 'Document AI', path: '/lawyer/document-ai' },
     { name: 'Agreement Templates', path: '/lawyer/agreement-templates' },
     { name: 'Salary', path: '/lawyer/salary' },
     { name: 'Availability', path: '/lawyer/availability' },
     { name: 'Onboarding', path: '/lawyer/onboarding' },
     { name: 'Legal Updates', path: '/lawyer/legal-updates' },
-    { name: 'Calander', path: '/lawyer/under-development' },
     { name: 'Legal Eagle', path: '/lawyer/legal-eagle' },
   ]
 

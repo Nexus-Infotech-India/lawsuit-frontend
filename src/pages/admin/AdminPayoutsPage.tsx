@@ -140,8 +140,32 @@ const AdminPayoutsPage: FC = () => {
   }
 
   const recipientCell = (p: Payout) => {
-    const name = p.beneficiary?.name?.trim() || p.beneficiary?.email || p.beneficiaryUserId?.slice(0, 8) || '—'
-    const email = p.beneficiary?.email
+    // The server only sets `beneficiary` once `payoutStatus` advances past
+    // HELD_BY_PLATFORM (i.e. once the system knows who gets paid). For older
+    // / pending rows that field is null, so we fall back through the chain:
+    // beneficiary → appointment.lawyer → appointment.client → raw IDs. This
+    // matches mobile's `AdminPayoutsScreen` rendering exactly.
+    const fallback =
+      p.appointment?.lawyer?.name ||
+      p.appointment?.lawyer?.email ||
+      p.appointment?.client?.name ||
+      p.appointment?.client?.email
+    const name =
+      p.beneficiary?.name?.trim() ||
+      p.beneficiary?.email ||
+      fallback ||
+      p.beneficiaryUserId?.slice(0, 8) ||
+      'Awaiting recipient'
+    const subtitle =
+      p.beneficiary?.email ||
+      (fallback && fallback !== name ? fallback : null) ||
+      (p.beneficiaryType
+        ? p.beneficiaryType.replace(/_/g, ' ').toLowerCase()
+        : p.appointment?.lawyer
+          ? 'lawyer (pending)'
+          : p.appointment?.client
+            ? 'client (pending)'
+            : 'recipient not yet assigned')
     const isOrg = p.beneficiaryType === 'ORGANIZATION'
     const Icon = isOrg ? Building2 : Scale
     return (
@@ -161,9 +185,7 @@ const AdminPayoutsPage: FC = () => {
         )}
         <div className="min-w-0">
           <div className="font-medium text-gray-900 truncate">{name}</div>
-          <div className="text-xs text-gray-500 truncate">
-            {email || (p.beneficiaryType ? p.beneficiaryType.replace(/_/g, ' ').toLowerCase() : 'unknown')}
-          </div>
+          <div className="text-xs text-gray-500 truncate">{subtitle}</div>
         </div>
       </div>
     )

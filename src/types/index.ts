@@ -11,6 +11,13 @@ export interface User {
   avatar?: string;
   /** Present when role === 'ORGANIZATION' (decoded from JWT). */
   organizationId?: string | null;
+  /**
+   * Server-side flag set when an admin invites a user with a temporary
+   * password (or after a forced reset). Frontend route guard bounces such
+   * users to `/auth/change-password` until they rotate their password.
+   * Cleared by `authApi.changePassword` on success.
+   */
+  mustChangePassword?: boolean;
 }
 
 // ── Organization (Law Firm) ────────────────────────────────────────────
