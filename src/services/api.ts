@@ -26,27 +26,44 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Handle auth errors
-// Token refresh handling: on 401, try to refresh using refresh token and retry once.
+// ─────────────────────────────────────────────────────────────────────────
+// Auth-error interceptor with single-flight token refresh.
+//
+// Flow:
+//   1. Any 401 from the API (other than the refresh / login endpoints
+//      themselves) triggers a refresh attempt via /auth/refresh.
+//   2. Concurrent 401s share the same in-flight refresh promise, so we
+//      never spam the refresh endpoint or double-rotate the refresh token.
+//   3. On success we retry the original request with the new access token.
+//   4. Only when the *refresh* itself fails (refresh token expired, revoked,
+//      or no refresh token in storage) do we bounce the user to login.
+//
+// Previously this interceptor short-circuited on any response body matching
+// /jwt expired/ — that defeated the whole purpose of refresh tokens, because
+// an expired access token (the common case) would force re-login instead of
+// silently rotating. With the server's default 7-day access token TTL, that
+// meant users seeing "session expired" anytime they came back after a few
+// hours, even though the refresh token was still valid for 30 days.
+// ─────────────────────────────────────────────────────────────────────────
+
 let isRefreshing = false
 let refreshPromise: Promise<any> | null = null
+
+// URLs we must NOT auto-refresh on — refreshing on /auth/refresh itself
+// would infinite-loop, and refreshing on /auth/login etc. would obscure
+// a legitimate "wrong password" 401 by trying to use a stale refresh token.
+const NO_REFRESH_PATHS = ['/auth/refresh', '/auth/login', '/auth/register', '/auth/request-otp', '/auth/verify-otp']
+
+const isAuthEndpoint = (url: string | undefined) => {
+  if (!url) return false
+  return NO_REFRESH_PATHS.some((p) => url.includes(p))
+}
 
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     const originalRequest = error.config
     const status = error.response?.status
-    const respData = error.response?.data
-
-    // Normalize error message: backend sometimes returns { error: { code, message } }
-    let errMsg = ''
-    if (respData) {
-      if (typeof respData === 'string') errMsg = respData
-      else if (typeof respData.error === 'string') errMsg = respData.error
-      else if (respData.error && typeof respData.error.message === 'string') errMsg = respData.error.message
-      else if (typeof respData.message === 'string') errMsg = respData.message
-      else errMsg = JSON.stringify(respData)
-    }
 
     // Helper: when we have to bounce the user back to login because their
     // session can't be refreshed, append `?session=expired` so the login page
@@ -64,16 +81,22 @@ api.interceptors.response.use(
       }
     }
 
-    // If the token is expired according to backend message, force logout and redirect to login
-    if (errMsg && /jwt expired|token expired|TokenExpiredError/i.test(errMsg)) {
-      bounceToLogin()
+    // Not a 401? Not our problem — let the caller handle it.
+    if (!status || status !== 401) return Promise.reject(error)
+
+    // 401 on /auth/refresh or login endpoints — don't try to recover; that
+    // would loop. Login failures shouldn't try to refresh either.
+    if (isAuthEndpoint(originalRequest?.url)) {
+      // If it's specifically the refresh endpoint that 401'd, the refresh
+      // token is dead — bounce. Other auth endpoints (login etc.) just reject
+      // so the caller can show "wrong password" inline without redirecting.
+      if (originalRequest?.url?.includes('/auth/refresh')) bounceToLogin()
       return Promise.reject(error)
     }
 
-    if (!status || status !== 401) return Promise.reject(error)
-
     if (originalRequest && (originalRequest as any)._retry) {
-      // already retried once -> force logout
+      // already retried once after a refresh -> the refresh succeeded but the
+      // server still rejects us. Bounce so the user can re-authenticate fresh.
       bounceToLogin()
       return Promise.reject(error)
     }
@@ -86,7 +109,13 @@ api.interceptors.response.use(
 
     if (!isRefreshing) {
       isRefreshing = true
-      refreshPromise = api
+      // Use a bare axios instance for the refresh call so this same response
+      // interceptor doesn't intercept its own refresh and recurse. (Previously
+      // this used `api.post('/auth/refresh', ...)` which sent the expired
+      // Authorization header on the refresh call too — fine functionally, but
+      // wasteful and confusing in logs.)
+      refreshPromise = axios
+        .create({ baseURL, headers: { 'Content-Type': 'application/json' } })
         .post('/auth/refresh', { refreshToken: storedRefresh })
         .then((res) => {
           const { accessToken, refreshToken } = res.data || {}

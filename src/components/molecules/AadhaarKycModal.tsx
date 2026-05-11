@@ -45,6 +45,14 @@ const AadhaarKycModal: FC<AadhaarKycModalProps> = ({ open, onClose, resumeSubmis
   const [otp, setOtp] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  /**
+   * Flips to `true` the first time the Aadhaar OTP send fails because the
+   * UIDAI provider (Sandbox.co.in) returns "Insufficient privilege" — i.e.
+   * production API access hasn't been provisioned for this account yet.
+   * When set, we replace the scary inline error with a calm explainer and
+   * visually emphasise the Email OTP fallback section below.
+   */
+  const [providerUnavailable, setProviderUnavailable] = useState(false)
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null)
   const [verifiedClient, setVerifiedClient] = useState<{
     aadhaarLast4?: string
@@ -126,9 +134,30 @@ const AadhaarKycModal: FC<AadhaarKycModalProps> = ({ open, onClose, resumeSubmis
       // Specialised messages for known statuses, otherwise route through
       // friendlyError so server-supplied text wins.
       const status = err?.response?.status
-      if (status === 429) setError("You've requested too many OTPs in the last hour. Please wait and try again.")
-      else if (status === 409) setError('Your account is already verified — no further action needed.')
-      else setError(friendlyError(err, "We couldn't send the OTP right now."))
+      const data = err?.response?.data as any
+      // Sandbox.co.in returns `{ error: { code: 'server_error', message: 'Insufficient privilege' } }`
+      // when the UIDAI production API hasn't been provisioned for the account.
+      // Detect either the structured error code OR the literal message so a
+      // small wording change on their side doesn't reopen this bug.
+      const providerCode = data?.error?.code || data?.error?.error?.code
+      const providerMsg = (data?.error?.message || data?.error?.error?.message || data?.error || data?.message || '').toString().toLowerCase()
+      const isProviderUnavailable =
+        providerCode === 'server_error' ||
+        providerMsg.includes('insufficient privilege') ||
+        providerMsg.includes('provider not configured') ||
+        status === 503
+
+      if (isProviderUnavailable) {
+        setProviderUnavailable(true)
+        // No inline red banner — the calm explainer below replaces it.
+        setError(null)
+      } else if (status === 429) {
+        setError("You've requested too many OTPs in the last hour. Please wait and try again.")
+      } else if (status === 409) {
+        setError('Your account is already verified — no further action needed.')
+      } else {
+        setError(friendlyError(err, "We couldn't send the OTP right now."))
+      }
     } finally {
       setBusy(false)
     }
@@ -307,18 +336,39 @@ const AadhaarKycModal: FC<AadhaarKycModalProps> = ({ open, onClose, resumeSubmis
               </span>
             </label>
 
-            {error && (
+            {error && !providerUnavailable && (
               <div className="text-sm text-red-700 bg-red-50 border border-red-100 rounded-lg px-3 py-2 flex items-start gap-2">
                 <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" /> {error}
               </div>
             )}
+
+            {/* Calm explainer when the UIDAI sandbox provider is unavailable —
+                points at the Email OTP fallback below so the user has a clear
+                path forward instead of staring at a "Insufficient privilege"
+                error from the upstream provider. */}
+            {providerUnavailable && (
+              <div className="text-sm text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0 text-amber-700" />
+                <div>
+                  <div className="font-semibold">Aadhaar verification isn't live yet</div>
+                  <div className="text-xs text-amber-800 mt-0.5">
+                    Our UIDAI Aadhaar OTP integration is still pending provider
+                    approval. Please use the <strong>Email OTP</strong> option below
+                    for now — you'll be verified just as well, and we'll upgrade
+                    you to Aadhaar verification automatically once it's live.
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               type="submit"
-              disabled={busy || aadhaar.replace(/\s/g, '').length !== 12 || !consent}
+              disabled={busy || aadhaar.replace(/\s/g, '').length !== 12 || !consent || providerUnavailable}
               className="w-full inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-indigo-600 text-white font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={providerUnavailable ? 'Aadhaar provider is not available yet — please use Email OTP below.' : undefined}
             >
               {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-              {busy ? 'Sending OTP…' : 'Send OTP'}
+              {busy ? 'Sending OTP…' : providerUnavailable ? 'Aadhaar OTP unavailable' : 'Send OTP'}
             </button>
             <p className="text-xs text-gray-400 text-center">
               Up to 5 OTP requests per hour. Delivery is handled by UIDAI.
@@ -341,18 +391,27 @@ const AadhaarKycModal: FC<AadhaarKycModalProps> = ({ open, onClose, resumeSubmis
               </div>
             </div>
 
-            <div className="rounded-lg border border-amber-200 bg-amber-50/60 p-4">
+            {/* Visual emphasis bumps up (ring + slightly stronger bg) when
+                the Aadhaar flow failed because the provider is unavailable —
+                helps the user spot the recommended next step immediately. */}
+            <div
+              className={`rounded-lg border p-4 transition-shadow ${
+                providerUnavailable
+                  ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-200'
+                  : 'border-amber-200 bg-amber-50/60'
+              }`}
+            >
               <div className="flex items-start gap-2">
                 <Mail className="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <h4 className="text-sm font-semibold text-amber-900">
-                    Temporary alternative — Email OTP
+                    {providerUnavailable ? 'Use this instead — Email OTP' : 'Temporary alternative — Email OTP'}
                   </h4>
                   <p className="text-xs text-amber-800 mt-1 leading-relaxed">
-                    The Aadhaar provider isn't connected yet. As a temporary
-                    measure, you can verify with a 6-digit OTP sent to your
-                    registered email
-                    {me?.email ? <> (<span className="font-mono">{me.email}</span>)</> : null}.
+                    {providerUnavailable
+                      ? 'Until the Aadhaar provider goes live, this is the recommended way to verify. We send a 6-digit OTP to your registered email '
+                      : "The Aadhaar provider isn't connected yet. As a temporary measure, you can verify with a 6-digit OTP sent to your registered email "}
+                    {me?.email ? <>(<span className="font-mono">{me.email}</span>).</> : '.'}{' '}
                     You'll be marked verified for now; we'll ask you to upgrade
                     to Aadhaar verification once that flow is live.
                   </p>
@@ -360,7 +419,11 @@ const AadhaarKycModal: FC<AadhaarKycModalProps> = ({ open, onClose, resumeSubmis
                     type="button"
                     onClick={handleInitiateEmailOtp}
                     disabled={busy}
-                    className="mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-amber-300 bg-white text-amber-900 text-xs font-medium hover:bg-amber-100 disabled:opacity-50"
+                    className={`mt-3 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50 ${
+                      providerUnavailable
+                        ? 'bg-amber-600 text-white border border-amber-600 hover:bg-amber-700'
+                        : 'border border-amber-300 bg-white text-amber-900 hover:bg-amber-100'
+                    }`}
                   >
                     {busy && path === 'EMAIL_OTP'
                       ? <Loader2 className="w-3.5 h-3.5 animate-spin" />

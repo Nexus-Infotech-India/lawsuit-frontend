@@ -117,10 +117,16 @@ const ProfilePage: FC = () => {
     setSaving(true)
     setError(null)
     try {
-      // Send name and avatarUrl to PUT /users/me per requested flow
+      // PUT /users/me accepts { name?, phone?, avatarUrl? } — include any
+      // field that's been touched. Phone is only sent when it actually
+      // changed from the server-side value (and is non-empty) so we don't
+      // accidentally null it out or trigger a re-verification when the user
+      // never touched the field.
       const payload: any = {}
       if (name) payload.name = name
       if (avatarUrl) payload.avatarUrl = avatarUrl
+      const serverPhone = user?.phone != null ? String(user.phone) : ''
+      if (phone && phone !== serverPhone) payload.phone = phone
 
       await updateUser(payload)
       const refreshed = useUserStore.getState().user || useAuthStore.getState().user
@@ -227,8 +233,24 @@ const ProfilePage: FC = () => {
             <div>
               <label className="block text-sm text-gray-600 mb-1">Phone</label>
               <div className="flex gap-2 items-center">
-                <input value={phone} disabled className="flex-1 border rounded p-2" />
-                {user?.phoneVerified ? (
+                <input
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="10-digit phone number"
+                  className="flex-1 border rounded p-2"
+                />
+                {/*
+                  Show "Verified" only when the server-side phone matches what's
+                  in the input. If the user edits the phone (changes the value
+                  away from the verified one), drop back to the Verify button so
+                  they re-OTP the new number before relying on it for SMS / OTP
+                  flows. Otherwise we'd falsely claim an unverified number is
+                  verified.
+                */}
+                {user?.phoneVerified && phone === (user?.phone != null ? String(user.phone) : '') ? (
                   <span className="text-green-600 text-sm">Verified</span>
                 ) : (
                   <Button onClick={() => handleRequestAndVerify(phone)} disabled={!phone}>Verify</Button>
