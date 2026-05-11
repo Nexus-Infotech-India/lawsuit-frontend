@@ -1,7 +1,8 @@
 import { FC, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Calendar, Clock, FileText, MessageSquare, User, Video, Upload, RefreshCw, XCircle, ChevronDown, ChevronUp, Check, X, CheckCircle2 } from 'lucide-react'
+import { Calendar, Clock, FileText, MessageSquare, User, Video, Upload, RefreshCw, XCircle, ChevronDown, ChevronUp, Check, X, CheckCircle2, Sparkles } from 'lucide-react'
 import AppointmentDiscussionPanel from '@/components/organisms/AppointmentDiscussionPanel'
+import AppointmentDocumentsPanel from '@/components/molecules/AppointmentDocumentsPanel'
 import EkycVerifiedBadge from '@/components/atoms/EkycVerifiedBadge'
 import { appointmentsExtApi } from '@/services/api'
 
@@ -105,6 +106,7 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
   onChanged,
 }) => {
   const [discussionOpen, setDiscussionOpen] = useState(false)
+  const [documentsOpen, setDocumentsOpen] = useState(false)
   const [busyAction, setBusyAction] = useState<null | 'accept' | 'reject' | 'complete'>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const otherParty = appointment.client
@@ -418,6 +420,21 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
               appointmentStatus={appointment.status}
             />
           )}
+        </div>
+      )}
+
+      {/* Documents & AI summaries — expandable */}
+      {(appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED') && (
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          <button
+            onClick={() => setDocumentsOpen(prev => !prev)}
+            className="flex items-center gap-2 text-sm font-medium text-fuchsia-700 hover:text-fuchsia-800 transition"
+          >
+            <Sparkles className="w-4 h-4" />
+            Documents & AI summaries
+            {documentsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          {documentsOpen && <AppointmentDocumentsPanel appointmentId={appointment.id} />}
         </div>
       )}
     </div>

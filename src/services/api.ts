@@ -235,7 +235,14 @@ export const appointmentsApi = {
     api.post('/appointments/availability', { lawyerId, date, options }),
   updateAgreementUrl: (data: UpdateAgreementUrlInput) => {
     api.post('/appointments/update-agreement-url', data.body);
-  }
+  },
+  // Attach a document to an appointment. Backend wraps OCR + auto-summary.
+  addDocument: (
+    appointmentId: string,
+    body: { fileurl: string; fileName: string; mimeType: string; size?: number },
+  ) => api.post(`/appointments/${appointmentId}/documents`, body),
+  listDocuments: (appointmentId: string) =>
+    api.get(`/appointments/${appointmentId}/documents`),
 }
 
 export const casesApi = {
@@ -744,6 +751,13 @@ export const documentAiApi = {
     api.post(`/cases/${caseId}/documents/${documentId}/summarize`),
   ask: (caseId: string, documentId: string, question: string) =>
     api.post(`/cases/${caseId}/documents/${documentId}/ask`, { question }),
+  // Generic per-document endpoints — work for any parent (case, appointment, etc.)
+  extractById: (documentId: string) =>
+    api.post(`/documents/${documentId}/extract`),
+  summarizeById: (documentId: string) =>
+    api.post(`/documents/${documentId}/summarize`),
+  askById: (documentId: string, question: string) =>
+    api.post(`/documents/${documentId}/ask`, { question }),
 }
 
 export const mediationApi = {

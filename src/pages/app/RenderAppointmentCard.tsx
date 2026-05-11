@@ -1,6 +1,7 @@
 import { FC, useMemo, useState } from 'react'
-import { Calendar, Clock, FileText, MessageSquare, User, RefreshCw, XCircle, Video, ChevronDown, ChevronUp } from 'lucide-react'
+import { Calendar, Clock, FileText, MessageSquare, User, RefreshCw, XCircle, Video, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import AppointmentDiscussionPanel from '@/components/organisms/AppointmentDiscussionPanel'
+import AppointmentDocumentsPanel from '@/components/molecules/AppointmentDocumentsPanel'
 
 interface AppointmentData {
   scheduledAt: string;
@@ -95,6 +96,7 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
   onEscalateToCase,
 }) => {
   const [discussionOpen, setDiscussionOpen] = useState(false)
+  const [documentsOpen, setDocumentsOpen] = useState(false)
   const otherParty = userRole === 'client' ? appointment.lawyer : appointment.client
 
   const isVideoCallActive = useMemo(() => {
@@ -277,6 +279,23 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
                 appointmentStatus={appointment.status}
               />
             )}
+          </div>
+        )
+      }
+
+      {/* Documents & AI summaries — expandable */}
+      {
+        (appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED') && (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <button
+              onClick={() => setDocumentsOpen(prev => !prev)}
+              className="flex items-center gap-2 text-sm font-medium text-fuchsia-700 hover:text-fuchsia-800 transition"
+            >
+              <Sparkles className="w-4 h-4" />
+              Documents & AI summaries
+              {documentsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {documentsOpen && <AppointmentDocumentsPanel appointmentId={appointment.id} />}
           </div>
         )
       }
