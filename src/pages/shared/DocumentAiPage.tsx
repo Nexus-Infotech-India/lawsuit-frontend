@@ -11,11 +11,16 @@ import {
   User as UserIcon,
   CheckCircle2,
   ScrollText,
+  Plus,
+  X,
+  ShieldCheck,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
-import { casesApi, documentAiApi } from '@/services/api'
+import api, { apiEndpoints, casesApi, documentAiApi } from '@/services/api'
 import { unwrapList, unwrapObject } from '@/utils/unwrap'
 import { friendlyError } from '@/utils/errors'
+import UploadInput from '@/components/atoms/UploadButton'
+import Modal from '@/components/atoms/Modal'
 
 interface CaseRow {
   id: string
@@ -83,6 +88,14 @@ const DocumentAiPage: FC = () => {
   const [loadingCase, setLoadingCase] = useState(false)
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
+
+  // Inline upload — matches the mobile app's convenience of doing
+  // upload + summarize in one place instead of bouncing to case detail.
+  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadUrl, setUploadUrl] = useState<string | null>(null)
+  const [uploadFileName, setUploadFileName] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const loadCases = async () => {
     setLoadingCases(true)
@@ -157,6 +170,65 @@ const DocumentAiPage: FC = () => {
     }
   }
 
+  const closeUploadModal = () => {
+    setUploadOpen(false)
+    setUploadUrl(null)
+    setUploadFileName('')
+    setUploadError(null)
+  }
+
+  const mimeFromName = (name: string): string => {
+    const ext = name.split('.').pop()?.toLowerCase() || ''
+    const map: Record<string, string> = {
+      pdf: 'application/pdf',
+      doc: 'application/msword',
+      docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      jpg: 'image/jpeg',
+      jpeg: 'image/jpeg',
+      png: 'image/png',
+      gif: 'image/gif',
+      webp: 'image/webp',
+      txt: 'text/plain',
+    }
+    return map[ext] || 'application/octet-stream'
+  }
+
+  const saveUploadedDocument = async () => {
+    if (!activeCaseId || !uploadUrl) return
+    setSaving(true)
+    setUploadError(null)
+    try {
+      const filename = uploadFileName || uploadUrl.split('/').pop() || 'document'
+      const res = await api.post(apiEndpoints.case.addDocument(activeCaseId), {
+        fileurl: uploadUrl,
+        fileName: filename,
+        mimeType: mimeFromName(filename),
+      })
+      const newDoc =
+        unwrapObject<DocumentRow>(res.data, 'document') ??
+        unwrapObject<DocumentRow>(res.data, 'data') ??
+        (res.data as DocumentRow | undefined)
+      closeUploadModal()
+      await refreshActiveCase()
+      if (newDoc?.id) {
+        setActiveDocId(newDoc.id)
+        // Kick off extraction in the background so the summary is ready by
+        // the time the user notices the new doc. The backend's /extract now
+        // auto-summarizes, so a single call populates both fields.
+        documentAiApi
+          .extract(activeCaseId, newDoc.id)
+          .then(() => refreshActiveCase())
+          .catch(() => {
+            /* extraction can be retried manually from the workspace */
+          })
+      }
+    } catch (err) {
+      setUploadError(friendlyError(err, "We couldn't save this document."))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="space-y-4 max-w-7xl mx-auto px-4 sm:px-0">
       <header className="flex items-center justify-between gap-3 flex-wrap">
@@ -193,7 +265,7 @@ const DocumentAiPage: FC = () => {
       ) : cases.length === 0 ? (
         <EmptyState
           title="You don't have any cases yet"
-          description="Document AI works on case files. Create or join a case first, upload a document, then come back."
+          description="Document AI works on case files. Create or join a case first, then come back here to upload documents and generate summaries."
         />
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
@@ -233,9 +305,20 @@ const DocumentAiPage: FC = () => {
 
           {/* Document picker */}
           <section className="lg:col-span-4 space-y-3">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <SectionHeader icon={FileText} text="Documents" />
-              {loadingCase && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+              <div className="flex items-center gap-2">
+                {loadingCase && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                <button
+                  onClick={() => setUploadOpen(true)}
+                  disabled={!activeCaseId}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title={!activeCaseId ? 'Pick a case first' : 'Upload a new document'}
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Upload
+                </button>
+              </div>
             </div>
             {!activeCase ? (
               <div className="bg-white border border-gray-100 rounded-xl p-6 text-center text-sm text-gray-500">
@@ -246,7 +329,7 @@ const DocumentAiPage: FC = () => {
                 <FileText className="w-8 h-8 mx-auto text-gray-300 mb-2" />
                 <p className="text-sm text-gray-700 font-medium">No documents on this case</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  Upload a document from the case detail page first.
+                  Click <span className="font-medium text-fuchsia-700">Upload</span> to add a PDF, Word doc, or image — we'll extract the text and generate a summary automatically.
                 </p>
               </div>
             ) : (
@@ -298,6 +381,71 @@ const DocumentAiPage: FC = () => {
           </section>
         </div>
       )}
+
+      {/* Inline upload — case selected required */}
+      <Modal open={uploadOpen}>
+        <div className="w-[500px] max-w-[90vw]">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-800">Upload document</h2>
+            <button
+              onClick={closeUploadModal}
+              className="p-1 text-gray-400 hover:text-gray-600 transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="p-4 space-y-4">
+            <div className="flex items-start gap-3 p-3 rounded-lg bg-fuchsia-50 border border-fuchsia-100">
+              <ShieldCheck className="w-5 h-5 text-fuchsia-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-gray-700 leading-relaxed">
+                <p className="font-semibold text-gray-800 mb-0.5">Uploading to case</p>
+                <p className="truncate">{activeCase?.title || 'Selected case'}</p>
+                <p className="mt-1">Supported: PDF, DOCX, and common image types (JPG, PNG). After saving, we'll extract the text and generate a summary automatically.</p>
+              </div>
+            </div>
+
+            <UploadInput
+              imageUrl={uploadUrl}
+              setImageUrl={(url) => {
+                if (typeof url === 'function') {
+                  setUploadUrl(url)
+                } else {
+                  setUploadUrl(url)
+                  if (url) {
+                    const name = decodeURIComponent(url.split('/').pop()?.split('?')[0] || '')
+                    setUploadFileName(name)
+                  }
+                }
+              }}
+              width="full"
+            />
+
+            {uploadError && (
+              <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-xs text-red-700 flex items-start gap-2">
+                <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                {uploadError}
+              </div>
+            )}
+          </div>
+          <div className="flex justify-end gap-3 p-4 border-t border-gray-200">
+            <button
+              onClick={closeUploadModal}
+              className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={saveUploadedDocument}
+              disabled={!uploadUrl || saving}
+              className="px-4 py-2 bg-fuchsia-600 text-white rounded-lg hover:bg-fuchsia-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm inline-flex items-center gap-2"
+            >
+              {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+              {saving ? 'Saving…' : 'Save document'}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
