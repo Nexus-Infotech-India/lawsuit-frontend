@@ -7,10 +7,29 @@ import type {
   CallEndReason,
   CallInitiatedEvent,
   CallIncomingEvent,
+  CallRoomReadyEvent,
+  CallRoomStateEvent,
 } from '@/types/video'
 import { soundManager } from '@/utils/soundManager'
 
+/**
+ * `roomStatusByChat` carries the "Is someone in the video call right
+ * now?" signal received from `call:room:state` broadcasts. The chat
+ * page's Start/Join CTA reads from here, keyed by chatId.
+ */
+export interface ChatRoomStatus {
+  isActive: boolean
+  callId?: string | null
+  mediaType?: 'audio' | 'video'
+  startedBy?: string
+  participantCount?: number
+}
+
 interface VideoCallStore extends VideoCallState {
+  // Per-chat room status (populated from `call:room:state` broadcasts).
+  roomStatusByChat: Record<string, ChatRoomStatus>
+  setRoomStatus: (chatId: string, status: ChatRoomStatus) => void
+
   // Lifecycle
   initiateCall: (callType: CallType, referenceId: string, callee: CallParticipant) => void
   callInitiated: (data: CallInitiatedEvent) => void
@@ -20,6 +39,11 @@ interface VideoCallStore extends VideoCallState {
   callConnected: () => void
   endCall: (reason: CallEndReason) => void
   reset: () => void
+
+  // Shared-room flow
+  beginJoin: (chatId: string) => void
+  callRoomReady: (data: CallRoomReadyEvent) => void
+  callRoomLeft: () => void
 
   // UI controls
   toggleMinimize: () => void
@@ -46,6 +70,43 @@ const initialState: VideoCallState = {
 
 export const useVideoCallStore = create<VideoCallStore>((set) => ({
   ...initialState,
+  roomStatusByChat: {},
+
+  setRoomStatus: (chatId, status) =>
+    set((state) => ({
+      roomStatusByChat: { ...state.roomStatusByChat, [chatId]: status },
+    })),
+
+  // Shared-room flow ────────────────────────────────────────────────
+  // The user hit "Start" or "Join". We optimistically flip to
+  // `connecting` (the room exists or is about to). The `call:room:ready`
+  // ack will fill in callId / roomUrl / token and the DailyVideoPlayer
+  // moves us to `connected` once the iframe joins.
+  beginJoin: (chatId) => {
+    set({
+      ...initialState,
+      status: 'connecting',
+      callType: 'chat',
+      referenceId: chatId,
+    })
+  },
+
+  callRoomReady: (data) => {
+    set({
+      callId: data.callId,
+      roomUrl: data.roomUrl,
+      token: data.token,
+      // For audio calls we land with the camera off so the recipient
+      // doesn't see an open camera before they realise the call is
+      // audio-only. `isCameraOff` is honoured by DailyVideoPlayer.
+      isCameraOff: data.mediaType === 'audio',
+    })
+  },
+
+  callRoomLeft: () => {
+    soundManager.playOnce('ended')
+    set(initialState)
+  },
 
   // Caller: local optimistic state while we wait for the backend ack
   initiateCall: (callType, referenceId, callee) => {

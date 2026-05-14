@@ -2,6 +2,7 @@ import { FC, useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
 import Button from '@/components/atoms/Button'
+import AddressPicker from '@/components/molecules/AddressPicker'
 
 const EyeIcon: FC<{ className?: string }> = ({ className }) => (
   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -261,29 +262,32 @@ const RegisterPage: FC = () => {
                       <option value="SUPREME_COURT">Supreme Court</option>
                     </select>
                   </div>
-                  <div>
-                    <label htmlFor="court-pincode" className="block text-sm font-medium text-gray-700">Pincode</label>
-                    <input id="court-pincode" name="pincode" type="text" required pattern="\d{6}" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.pincode} onChange={handleCourtChange} />
-                  </div>
                 </div>
                 <div>
                   <label htmlFor="court-address" className="block text-sm font-medium text-gray-700">Address</label>
                   <input id="court-address" name="address" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.address} onChange={handleCourtChange} />
                 </div>
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label htmlFor="court-city" className="block text-sm font-medium text-gray-700">City (Optional)</label>
-                    <input id="court-city" name="city" type="text" className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.city} onChange={handleCourtChange} />
-                  </div>
-                  <div>
-                    <label htmlFor="court-district" className="block text-sm font-medium text-gray-700">District</label>
-                    <input id="court-district" name="district" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.district} onChange={handleCourtChange} />
-                  </div>
-                  <div>
-                    <label htmlFor="court-state" className="block text-sm font-medium text-gray-700">State</label>
-                    <input id="court-state" name="state" type="text" required className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm" value={courtDetails.state} onChange={handleCourtChange} />
-                  </div>
-                </div>
+                {/* Pincode → state/district/city auto-fill. The court-admin
+                    self-registration server schema requires pincode + state
+                    + district + city, so the picker fills all four from the
+                    Indian pincode lookup. */}
+                <AddressPicker
+                  value={{
+                    pincode: courtDetails.pincode,
+                    state: courtDetails.state,
+                    district: courtDetails.district,
+                    city: courtDetails.city,
+                  }}
+                  onChange={(next) =>
+                    setCourtDetails((prev) => ({
+                      ...prev,
+                      pincode: next.pincode || '',
+                      state: next.state || '',
+                      district: next.district || '',
+                      city: next.city || '',
+                    }))
+                  }
+                />
               </div>
             )}
           </div>

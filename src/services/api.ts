@@ -286,9 +286,33 @@ export const chatApi = {
   listChats: () => api.get('/chat'),
   createChat: (payload: { otherUserId: string; caseId?: string | null }) => api.post('/chat', payload),
   getMessages: (chatId: string, params?: { page?: number; limit?: number }) => api.get(`/chat/${chatId}/messages`, { params }),
-  sendMessage: (chatId: string, data: { text?: string; attachments?: string[] }) =>
-    // Backend validation expects a JSON body like { text?: string, attachments?: string[] }
-    api.post(`/chat/${chatId}/messages`, { text: data.text, attachments: data.attachments }),
+  sendMessage: (
+    chatId: string,
+    data: {
+      text?: string
+      attachments?: string[]
+      /**
+       * Optional per-attachment metadata. When provided the server materialises
+       * a `Document` row per URL (with filename/mimeType/size) so the chip the
+       * user sees in chat is linkable into the document-AI screens. Without
+       * metas the server falls back to inferring from the URL.
+       */
+      attachmentMetas?: Array<{
+        url: string
+        filename?: string
+        mimeType?: string
+        size?: number
+      }>
+    },
+  ) =>
+    // Backend validation expects a JSON body of { text?, attachments?, attachmentMetas? }.
+    // Sending `text: ''` is valid for an attachment-only message — the server
+    // requires at least one of text/attachments to be present.
+    api.post(`/chat/${chatId}/messages`, {
+      text: data.text,
+      attachments: data.attachments,
+      attachmentMetas: data.attachmentMetas,
+    }),
   getParticipants: (chatId: string) => api.get(`/chat/${chatId}/participants`),
   getOrCreateAppointmentChat: (appointmentId: string) => api.get(`/chat/appointment/${appointmentId}`),
 }
@@ -591,9 +615,27 @@ export const casesExtApi = {
   // Timeline
   addTimeline: (caseId: string, payload: { event: string; description?: string; timestamp?: string }) =>
     api.post(`/cases/${caseId}/timeline`, payload),
+  // Lawyer-specific richer create endpoint (title + description + eventDate +
+  // type). Server route: POST /cases/add/timeline/event/:caseid.
+  createTimelineEvent: (
+    caseId: string,
+    payload: { title: string; description?: string; eventDate: string; type?: string },
+  ) => api.post(`/cases/add/timeline/event/${caseId}`, payload),
+  listTimelineEvents: (caseId: string) => api.get(`/cases/timeline/events/${caseId}`),
+  updateTimelineEvent: (
+    eventId: string,
+    payload: { title?: string; description?: string; eventDate?: string; type?: string },
+  ) => api.put(`/cases/timeline/events/${eventId}`, payload),
+  deleteTimelineEvent: (eventId: string) => api.delete(`/cases/timeline/events/${eventId}`),
   // Hearings
   addHearing: (caseId: string, payload: { date: string; court?: string; judge?: string; purpose?: string; outcome?: string; notes?: string }) =>
     api.post(`/cases/${caseId}/hearings`, payload),
+  listHearings: (caseId: string) => api.get(`/cases/hearings/${caseId}`),
+  updateHearing: (
+    hearingId: string,
+    payload: { date?: string; court?: string; judge?: string; purpose?: string; outcome?: string; notes?: string },
+  ) => api.put(`/cases/hearings/${hearingId}`, payload),
+  deleteHearing: (hearingId: string) => api.delete(`/cases/hearings/${hearingId}`),
   // Resolution & closure
   updateResolutionMethod: (caseId: string, method: 'TRIAL' | 'MEDIATION' | 'ARBITRATION') =>
     api.put(`/cases/${caseId}/resolution-method`, { resolutionMethod: method }),
@@ -637,10 +679,18 @@ export const ekycApi = {
 
 export const storageApi = {
   getPresignedUrl: `${baseURL}/storage/presigned`,
-  // GET /storage/sign?folder=documents|profiles|lawyer-applications
-  // Returns Cloudinary signed upload params: { timestamp, signature, cloudName, apiKey, folder }
-  getSignature: (folder: 'documents' | 'profiles' | 'lawyer-applications' = 'lawyer-applications') =>
-    api.get('/storage/sign', { params: { folder } }),
+  // GET /storage/sign?folder=documents|profiles|lawyer-applications|chat-attachments
+  // Returns Cloudinary signed upload params: { timestamp, signature, cloudName, apiKey, folder }.
+  // The server accepts any folder string — the union here is a soft typing
+  // guard so callers don't pass a typo. Add new folders as needed.
+  getSignature: (
+    folder:
+      | 'documents'
+      | 'profiles'
+      | 'lawyer-applications'
+      | 'chat-attachments'
+      | 'appointment-docs' = 'lawyer-applications',
+  ) => api.get('/storage/sign', { params: { folder } }),
 }
 
 export const teleLawApi = {
@@ -752,6 +802,11 @@ export const documentAiApi = {
   ask: (caseId: string, documentId: string, question: string) =>
     api.post(`/cases/${caseId}/documents/${documentId}/ask`, { question }),
   // Generic per-document endpoints — work for any parent (case, appointment, etc.)
+  // `getById` returns `{ document }` with extractedText/summary/url and the
+  // parent id (caseId|appointmentId|chatMessageId|orgRequestId) so the FE
+  // can deep-link into a single doc without first knowing its parent.
+  getById: (documentId: string) =>
+    api.get(`/documents/${documentId}`),
   extractById: (documentId: string) =>
     api.post(`/documents/${documentId}/extract`),
   summarizeById: (documentId: string) =>
@@ -799,6 +854,13 @@ export const courtAdminApi = {
   login: (email: string, password: string) => api.post('/court-admin/login', { email, password }),
   getCourtsByPincode: (pincode: string) => api.get(`/court-admin/public/courts/by-pincode/${pincode}`),
   getAdminsByPincode: (pincode: string) => api.get(`/court-admin/public/admins/by-pincode/${pincode}`),
+  // Wider net than pincode — used by the lawyer-verification onboarding step
+  // and the org verification request flow. A pincode covers a tiny slice of
+  // a district so most lawyers used to see an empty list; querying by
+  // `(district, state)` returns every court admin the user can reasonably
+  // approach.
+  getAdminsByDistrict: (district: string, state?: string) =>
+    api.get('/court-admin/public/admins/by-district', { params: { district, state } }),
   getMe: () => api.get('/court-admin/me'),
   updateMe: (data: { name?: string; email?: string; phone?: string; avatarUrl?: string; registrationNumber?: string }) =>
     api.put('/court-admin/me', data),
@@ -864,7 +926,13 @@ export interface OrgAddLawyerPayload {
   name: string
   email: string
   phone: string
-  password: string
+  /**
+   * Optional. When omitted, the server auto-generates a temporary password
+   * and emails it to the lawyer along with the login URL. When supplied,
+   * the server uses it verbatim and the org head is expected to share it
+   * out-of-band (no email is sent in that case).
+   */
+  password?: string
   licenseNumber?: string
   barCouncilId?: string
   specializations?: string[]
@@ -907,15 +975,36 @@ export const organizationsApi = {
   rejectAppointmentRequest: (id: string, reason: string) =>
     api.post(`/organizations/me/appointment-requests/${id}/reject`, { reason }),
 
-  // Client-facing
+  // Client-facing — `paymentMethod` is required by the server schema (defaults
+  // to razorpay). When the client picks wallet the server debits at booking
+  // time; for razorpay the server creates an order and returns its details so
+  // the caller can open Razorpay checkout immediately.
   createAppointmentRequest: (
     organizationId: string,
-    data: { scheduledAt: string; durationMins?: number; meetingType?: string; notes?: string }
+    data: {
+      scheduledAt: string
+      durationMins?: number
+      meetingType?: string
+      notes?: string
+      paymentMethod?: 'razorpay' | 'wallet'
+    }
   ) => api.post(`/organizations/${organizationId}/appointment-requests`, data),
   listMyRequests: (params?: { status?: string; page?: number; limit?: number }) =>
     api.get('/organizations/clients/me/requests', { params }),
   cancelMyRequest: (id: string) =>
     api.post(`/organizations/clients/me/requests/${id}/cancel`),
+  // Documents attached to a client's org-appointment-request. Mirrors the
+  // mobile contract — the client uploads supporting docs alongside the
+  // booking; the org head reads them while triaging. Each Document row
+  // gets OCR/summary via the generic /documents/:id/* endpoints.
+  attachRequestDocument: (
+    requestId: string,
+    body: { fileurl: string; fileName: string; mimeType: string; size?: number },
+  ) => api.post(`/organizations/clients/me/requests/${requestId}/documents`, body),
+  listMyRequestDocuments: (requestId: string) =>
+    api.get(`/organizations/clients/me/requests/${requestId}/documents`),
+  listOrgRequestDocuments: (requestId: string) =>
+    api.get(`/organizations/me/appointment-requests/${requestId}/documents`),
 
   // ─── Org-head salary management for lawyers under the org ────────────
   // Backed by `/organizations/me/lawyers/:id/salary*` (auth: ORGANIZATION).

@@ -1,4 +1,5 @@
 import { FC, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   Sparkles,
   Loader2,
@@ -14,12 +15,13 @@ import {
   Plus,
   X,
   ShieldCheck,
+  ArrowLeft,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import api, { apiEndpoints, casesApi, documentAiApi } from '@/services/api'
 import { unwrapList, unwrapObject } from '@/utils/unwrap'
 import { friendlyError } from '@/utils/errors'
-import UploadInput from '@/components/atoms/UploadButton'
+import UploadInput, { UploadedFileMeta } from '@/components/atoms/UploadButton'
 import Modal from '@/components/atoms/Modal'
 
 interface CaseRow {
@@ -79,6 +81,14 @@ const fmtDate = (s?: string) =>
  * server scopes every read by token.
  */
 const DocumentAiPage: FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams()
+  // Deep-link target. When `?documentId=…` is present, we fetch that doc
+  // directly via `documentAiApi.getById` and render the workspace standalone
+  // (skipping the case list). This is the path used when the user taps a doc
+  // chip in chat — those docs have a `chatMessageId` parent, not a `caseId`,
+  // so the existing case-centric layout couldn't show them.
+  const deepLinkDocId = searchParams.get('documentId')
+
   const [cases, setCases] = useState<CaseRow[]>([])
   const [loadingCases, setLoadingCases] = useState(true)
   const [casesError, setCasesError] = useState<string | null>(null)
@@ -89,11 +99,22 @@ const DocumentAiPage: FC = () => {
 
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
 
+  // Standalone deep-linked doc state. Distinct from `activeDoc` (derived from
+  // `activeCase.documents`) because a chat-uploaded doc has no parent case.
+  const [standaloneDoc, setStandaloneDoc] = useState<DocumentRow | null>(null)
+  const [loadingStandalone, setLoadingStandalone] = useState(false)
+  const [standaloneError, setStandaloneError] = useState<string | null>(null)
+
   // Inline upload — matches the mobile app's convenience of doing
   // upload + summarize in one place instead of bouncing to case detail.
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadUrl, setUploadUrl] = useState<string | null>(null)
   const [uploadFileName, setUploadFileName] = useState<string>('')
+  // Captured at pick-time so we don't have to derive mime from the
+  // Cloudinary URL — `raw/upload` strips the extension and the derived
+  // type comes back as `application/octet-stream`, which makes the
+  // server's OCR dispatcher refuse PDFs/DOCX.
+  const [uploadMeta, setUploadMeta] = useState<UploadedFileMeta | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
@@ -104,8 +125,10 @@ const DocumentAiPage: FC = () => {
       const res = await casesApi.getAll()
       const list = unwrapList<CaseRow>(res.data)
       setCases(list)
-      // Auto-select the first case so the user lands on something useful.
-      if (list[0] && !activeCaseId) setActiveCaseId(list[0].id)
+      // Auto-select the first case so the user lands on something useful —
+      // BUT only when we're not in deep-link mode (otherwise the auto-select
+      // would race with the deep-linked doc and steal focus).
+      if (list[0] && !activeCaseId && !deepLinkDocId) setActiveCaseId(list[0].id)
     } catch (err) {
       setCasesError(friendlyError(err, "We couldn't load your cases."))
     } finally {
@@ -117,6 +140,54 @@ const DocumentAiPage: FC = () => {
     loadCases()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Standalone load triggered by `?documentId=` in the URL. If the doc has
+  // a parent case we ALSO seed the case picker so the user can navigate to
+  // sibling docs; for chat-only docs we just show the workspace standalone.
+  const refreshStandaloneDoc = async (docId: string) => {
+    try {
+      const res = await documentAiApi.getById(docId)
+      const doc =
+        unwrapObject<DocumentRow & { caseId?: string | null }>(res.data, 'document') ??
+        (res.data as DocumentRow)
+      setStandaloneDoc(doc)
+      if ((doc as any)?.caseId) {
+        // Seed the case picker so "sibling" docs are reachable without a
+        // page reload. The case-load effect below will pick them up.
+        setActiveCaseId((prev) => prev ?? (doc as any).caseId)
+        setActiveDocId(doc.id)
+      }
+      return doc
+    } catch (err) {
+      setStandaloneError(friendlyError(err, "We couldn't open that document."))
+      return null
+    }
+  }
+
+  useEffect(() => {
+    if (!deepLinkDocId) {
+      setStandaloneDoc(null)
+      setStandaloneError(null)
+      return
+    }
+    let cancelled = false
+    setLoadingStandalone(true)
+    setStandaloneError(null)
+    ;(async () => {
+      await refreshStandaloneDoc(deepLinkDocId)
+      if (!cancelled) setLoadingStandalone(false)
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deepLinkDocId])
+
+  const exitDeepLink = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('documentId')
+    setSearchParams(next, { replace: true })
+  }
 
   // Refresh the chosen case's documents whenever activeCaseId changes.
   useEffect(() => {
@@ -174,6 +245,7 @@ const DocumentAiPage: FC = () => {
     setUploadOpen(false)
     setUploadUrl(null)
     setUploadFileName('')
+    setUploadMeta(null)
     setUploadError(null)
   }
 
@@ -198,29 +270,74 @@ const DocumentAiPage: FC = () => {
     setSaving(true)
     setUploadError(null)
     try {
-      const filename = uploadFileName || uploadUrl.split('/').pop() || 'document'
+      // Prefer the original File metadata over URL-derived guesses —
+      // Cloudinary `raw/upload` drops the extension so mimeFromName() on
+      // the URL returns `application/octet-stream` and OCR refuses to run.
+      const filename =
+        uploadMeta?.filename || uploadFileName || uploadUrl.split('/').pop() || 'document'
+      const mimeType = uploadMeta?.mimeType || mimeFromName(filename)
       const res = await api.post(apiEndpoints.case.addDocument(activeCaseId), {
         fileurl: uploadUrl,
         fileName: filename,
-        mimeType: mimeFromName(filename),
+        mimeType,
+        ...(uploadMeta?.size ? { size: uploadMeta.size } : {}),
       })
       const newDoc =
         unwrapObject<DocumentRow>(res.data, 'document') ??
         unwrapObject<DocumentRow>(res.data, 'data') ??
         (res.data as DocumentRow | undefined)
       closeUploadModal()
-      await refreshActiveCase()
+
+      // Optimistically prepend the new doc to the current case's document
+      // list so the user sees it immediately — even before the server refresh
+      // round-trips. Previously the refresh fired in parallel with the modal
+      // close and the doc only sometimes appeared depending on the race.
       if (newDoc?.id) {
+        setActiveCase((prev) => {
+          if (!prev) return prev
+          const existing = prev.documents ?? []
+          // Don't double-insert if the refresh below has already added it.
+          if (existing.some((d) => d.id === newDoc.id)) return prev
+          return {
+            ...prev,
+            documents: [
+              {
+                id: newDoc.id,
+                filename: newDoc.filename ?? filename,
+                mimeType: newDoc.mimeType ?? mimeFromName(filename),
+                size: newDoc.size,
+                url: newDoc.url ?? uploadUrl,
+                uploadedAt: newDoc.uploadedAt ?? new Date().toISOString(),
+                extractionStatus: 'PROCESSING',
+                extractedText: null,
+                summary: null,
+              },
+              ...existing,
+            ],
+          }
+        })
         setActiveDocId(newDoc.id)
+
+        // Authoritative refresh from the server — overwrites the optimistic
+        // entry with the real persisted row (which may have additional fields
+        // populated by the server like `version`, `uploadedAt`, etc.).
+        await refreshActiveCase()
+
         // Kick off extraction in the background so the summary is ready by
         // the time the user notices the new doc. The backend's /extract now
-        // auto-summarizes, so a single call populates both fields.
+        // auto-summarizes, so a single call populates both fields. We then
+        // refresh once more to pick up the extracted text + summary.
         documentAiApi
           .extract(activeCaseId, newDoc.id)
           .then(() => refreshActiveCase())
           .catch(() => {
             /* extraction can be retried manually from the workspace */
           })
+      } else {
+        // No id returned — fall back to a plain refresh so we at least re-read
+        // the latest list from the server. The Document picker will show the
+        // new doc once that lands.
+        await refreshActiveCase()
       }
     } catch (err) {
       setUploadError(friendlyError(err, "We couldn't save this document."))
@@ -258,7 +375,46 @@ const DocumentAiPage: FC = () => {
         </div>
       )}
 
-      {loadingCases ? (
+      {/* Standalone deep-link mode — bypass the case picker entirely so a
+          chat-uploaded doc (no parent case) can still be opened with
+          extract / summarize / Q&A available. */}
+      {deepLinkDocId ? (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={exitDeepLink}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-xs hover:bg-gray-50"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              All documents
+            </button>
+            <span className="text-xs text-gray-500">
+              Opened directly from a chat / appointment link.
+            </span>
+          </div>
+          {loadingStandalone ? (
+            <div className="flex items-center justify-center py-24">
+              <Loader2 className="w-6 h-6 animate-spin text-fuchsia-600" />
+            </div>
+          ) : standaloneError ? (
+            <div className="rounded-lg border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {standaloneError}
+            </div>
+          ) : standaloneDoc ? (
+            <DocumentWorkspace
+              key={standaloneDoc.id}
+              caseId={(standaloneDoc as any).caseId ?? null}
+              doc={standaloneDoc}
+              onChanged={() => refreshStandaloneDoc(deepLinkDocId)}
+            />
+          ) : (
+            <EmptyState
+              title="Document not found"
+              description="It may have been deleted, or you might not have access to it."
+            />
+          )}
+        </div>
+      ) : loadingCases ? (
         <div className="flex items-center justify-center py-24">
           <Loader2 className="w-6 h-6 animate-spin text-fuchsia-600" />
         </div>
@@ -373,7 +529,7 @@ const DocumentAiPage: FC = () => {
             ) : (
               <DocumentWorkspace
                 key={activeDoc.id}
-                caseId={activeCaseId!}
+                caseId={activeCaseId}
                 doc={activeDoc}
                 onChanged={refreshActiveCase}
               />
@@ -418,6 +574,7 @@ const DocumentAiPage: FC = () => {
                   }
                 }
               }}
+              onFileMeta={setUploadMeta}
               width="full"
             />
 
@@ -473,7 +630,9 @@ const ExtractionPill: FC<{ status?: string | null }> = ({ status }) => {
 // Workspace — three actions on the picked doc
 // ──────────────────────────────────────────────────────────────────────────
 const DocumentWorkspace: FC<{
-  caseId: string
+  /** Null when the doc isn't attached to a case (e.g. chat attachment).
+      The sub-tabs detect this and use the generic per-document endpoints. */
+  caseId: string | null
   doc: DocumentRow
   onChanged: () => void
 }> = ({ caseId, doc, onChanged }) => {
@@ -533,7 +692,7 @@ const DocumentWorkspace: FC<{
 }
 
 // ─── Summary tab ─────────────────────────────────────────────────────────
-const SummaryTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }> = ({
+const SummaryTab: FC<{ caseId: string | null; doc: DocumentRow; onChanged: () => void }> = ({
   caseId,
   doc,
   onChanged,
@@ -552,7 +711,12 @@ const SummaryTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }
     setBusy(true)
     setError(null)
     try {
-      const res = await documentAiApi.summarize(caseId, doc.id)
+      // Use the case-scoped endpoint when we have a parent case, the
+      // generic per-doc endpoint otherwise (chat attachments etc.). Both
+      // resolve to the same service on the server.
+      const res = caseId
+        ? await documentAiApi.summarize(caseId, doc.id)
+        : await documentAiApi.summarizeById(doc.id)
       const next =
         (res.data as any)?.summary ||
         (res.data as any)?.data?.summary ||
@@ -601,7 +765,7 @@ const SummaryTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }
 }
 
 // ─── Extract tab ─────────────────────────────────────────────────────────
-const ExtractTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }> = ({
+const ExtractTab: FC<{ caseId: string | null; doc: DocumentRow; onChanged: () => void }> = ({
   caseId,
   doc,
   onChanged,
@@ -620,7 +784,10 @@ const ExtractTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }
     setBusy(true)
     setError(null)
     try {
-      const res = await documentAiApi.extract(caseId, doc.id)
+      // Same case-vs-generic switch as the summary tab.
+      const res = caseId
+        ? await documentAiApi.extract(caseId, doc.id)
+        : await documentAiApi.extractById(doc.id)
       const payload = (res.data as any)?.document ?? (res.data as any)?.data?.document ?? (res.data as any)
       const next = payload?.extractedText || ''
       setText(next)
@@ -679,7 +846,7 @@ const ExtractTab: FC<{ caseId: string; doc: DocumentRow; onChanged: () => void }
 }
 
 // ─── Ask tab ─────────────────────────────────────────────────────────────
-const AskTab: FC<{ caseId: string; doc: DocumentRow }> = ({ caseId, doc }) => {
+const AskTab: FC<{ caseId: string | null; doc: DocumentRow }> = ({ caseId, doc }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [question, setQuestion] = useState('')
   const [busy, setBusy] = useState(false)
@@ -695,7 +862,9 @@ const AskTab: FC<{ caseId: string; doc: DocumentRow }> = ({ caseId, doc }) => {
     setQuestion('')
     setBusy(true)
     try {
-      const res = await documentAiApi.ask(caseId, doc.id, q)
+      const res = caseId
+        ? await documentAiApi.ask(caseId, doc.id, q)
+        : await documentAiApi.askById(doc.id, q)
       const answer =
         (res.data as any)?.answer ||
         (res.data as any)?.data?.answer ||

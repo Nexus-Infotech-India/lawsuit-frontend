@@ -1,8 +1,19 @@
 import { FC, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { ShieldCheck } from 'lucide-react'
 import Button from '@/components/atoms/Button'
 import { useOrganizationStore } from '@/stores/organizationStore'
 
+/**
+ * Public firm-discovery page for clients.
+ *
+ * Behaviour matches the mobile `OrgListScreen`:
+ *  - Default fetch is unfiltered (no `verified` param) so newly created firms
+ *    show up immediately. The previous version hard-coded `verified: true`
+ *    which left clients staring at an empty list in dev environments.
+ *  - The "Verified only" toggle adds the param when the user opts in. Pincode
+ *    and practice-area filters work the same.
+ */
 const FirmsListPage: FC = () => {
   const publicOrgs = useOrganizationStore((s) => s.publicOrgs)
   const fetchPublicOrgs = useOrganizationStore((s) => s.fetchPublicOrgs)
@@ -10,23 +21,34 @@ const FirmsListPage: FC = () => {
 
   const [pincode, setPincode] = useState('')
   const [practiceArea, setPracticeArea] = useState('')
+  const [verifiedOnly, setVerifiedOnly] = useState(false)
+
+  // Build the params shape the store accepts. `verified` is only included
+  // when the user explicitly opts in — otherwise the server-side query has
+  // no isVerified filter.
+  const buildParams = () => ({
+    pincode: pincode || undefined,
+    practiceArea: practiceArea || undefined,
+    verified: verifiedOnly ? true : undefined,
+  })
 
   useEffect(() => {
-    fetchPublicOrgs().catch(() => { })
-  }, [fetchPublicOrgs])
+    fetchPublicOrgs(buildParams()).catch(() => { })
+    // Re-run when the toggle changes so the list updates without an Apply click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verifiedOnly])
 
   const applyFilters = () => {
-    fetchPublicOrgs({
-      pincode: pincode || undefined,
-      practiceArea: practiceArea || undefined,
-    }).catch(() => { })
+    fetchPublicOrgs(buildParams()).catch(() => { })
   }
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-gray-900">Law firms</h1>
-        <p className="text-sm text-gray-500 mt-1">Verified firms — book a consultation and your firm assigns the right lawyer.</p>
+        <p className="text-sm text-gray-500 mt-1">
+          Browse firms across the platform — book a consultation and the firm assigns the right lawyer for your matter.
+        </p>
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 flex flex-col sm:flex-row gap-3 sm:items-end">
@@ -48,6 +70,18 @@ const FirmsListPage: FC = () => {
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md sm:text-sm"
           />
         </div>
+        <label className="inline-flex items-center gap-2 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={verifiedOnly}
+            onChange={(e) => setVerifiedOnly(e.target.checked)}
+            className="rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <span className="text-sm text-gray-700 inline-flex items-center gap-1">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            Verified only
+          </span>
+        </label>
         <Button onClick={applyFilters}>Apply</Button>
       </div>
 
@@ -56,7 +90,11 @@ const FirmsListPage: FC = () => {
       ) : publicOrgs.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-12 text-center">
           <h3 className="text-base font-medium text-gray-900">No firms found</h3>
-          <p className="text-sm text-gray-500 mt-1">Try a different pincode or practice area.</p>
+          <p className="text-sm text-gray-500 mt-1">
+            {verifiedOnly
+              ? 'Try turning off "Verified only" to see firms still in verification, or change your filters.'
+              : 'Try a different pincode or practice area.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -74,8 +112,13 @@ const FirmsListPage: FC = () => {
                     {org.name?.charAt(0).toUpperCase()}
                   </div>
                 )}
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">{org.name}</h3>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900 truncate flex items-center gap-1">
+                    {org.name}
+                    {org.isVerified && (
+                      <ShieldCheck className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                    )}
+                  </h3>
                   <p className="text-xs text-gray-500">
                     {org.city || org.district || ''}{org.pincode ? ` · ${org.pincode}` : ''}
                   </p>

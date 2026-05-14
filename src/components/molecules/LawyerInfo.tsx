@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { usersApi } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import AddressPicker from '@/components/molecules/AddressPicker'
+import { uploadToCloudinary } from '@/utils/cloudinaryUpload'
 import {
   Briefcase,
   GraduationCap,
@@ -45,6 +46,12 @@ interface LawyerInfoShape {
   education?: EducationEntry[]
   city?: string
   state?: string
+  // District is required for the profile-verification flow (the
+  // court-admin lookup matches on district, not pincode). It used to be
+  // missing from this interface even though the server, schema, and
+  // AddressPicker all carry it — which meant the read-only Location
+  // block never rendered the value after save.
+  district?: string
   pincode?: string
   address?: string
   feePerConsultation?: number  // stored in paise, displayed in rupees
@@ -166,17 +173,29 @@ const LawyerInfo: React.FC = () => {
     }
   }
 
-  const uploadFileToPresigned = async (file: File) => {
+  /**
+   * Upload a license / bar-council / education-certificate file.
+   *
+   * The earlier implementation called `usersApi.getPresignedUrl` and tried
+   * to PUT directly to S3 — but the server's `generatePresignedUpload`
+   * route actually returns Cloudinary signed-upload params (`timestamp`,
+   * `signature`, `cloudName`, …), not an S3 PUT URL. The handler therefore
+   * always threw "No upload url" and the save aborted with the generic
+   * "Failed to save lawyer info" alert, even though the rest of the
+   * payload was perfectly valid.
+   *
+   * We now route through the shared `uploadToCloudinary` util which:
+   *   1. asks `storageApi.getSignature('documents')` for the doc-folder
+   *      Cloudinary signature
+   *   2. POSTs to `/image/upload` or `/raw/upload` based on mime (PDFs go
+   *      to `raw`, certificate scans / photos go to `image`)
+   *   3. returns the resulting `secure_url`.
+   */
+  const uploadFileToPresigned = async (file: File): Promise<string | null> => {
     if (!userId) throw new Error('No user id')
     try {
-      const resp = await usersApi.getPresignedUrl(userId, { fileName: file.name, mimeType: file.type, size: file.size })
-      const body = (resp as any).data ?? resp
-      const upload = body.upload || body || {}
-      const uploadUrl: string = upload.uploadUrl || upload.upload_url
-      const fileUrl: string = upload.fileUrl || upload.file_url
-      if (!uploadUrl) throw new Error('No upload url')
-      await fetch(uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type || 'application/octet-stream', "x-amz-acl": "public-read" }, body: file })
-      return fileUrl || null
+      const url = await uploadToCloudinary(file, { folder: 'documents' })
+      return url || null
     } catch (err) {
       console.error('Upload failed', err)
       throw err
@@ -227,9 +246,14 @@ const LawyerInfo: React.FC = () => {
       setLicenseFile(null)
       setBarCouncilFile(null)
       setEducationFiles((normalized.education || []).map(() => null))
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to save lawyer info', err)
-      alert('Failed to save lawyer info')
+      const msg =
+        err?.response?.data?.error ||
+        err?.response?.data?.message ||
+        err?.message ||
+        'Failed to save lawyer info'
+      alert(`Failed to save lawyer info — ${msg}`)
     } finally {
       setSubmitting(false)
     }
@@ -331,7 +355,7 @@ const LawyerInfo: React.FC = () => {
               ) : editing ? (
                 <input
                   type="file"
-                  accept="image/*,application/pdf"
+
                   onChange={(e) => setLicenseFile(e.target.files?.[0] ?? null)}
                   className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 />
@@ -364,7 +388,7 @@ const LawyerInfo: React.FC = () => {
               ) : editing ? (
                 <input
                   type="file"
-                  accept="image/*,application/pdf"
+
                   onChange={(e) => setBarCouncilFile(e.target.files?.[0] ?? null)}
                   className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 />
@@ -596,7 +620,7 @@ const LawyerInfo: React.FC = () => {
                     ) : editing ? (
                       <input
                         type="file"
-                        accept="image/*,application/pdf"
+      
                         onChange={(e) => {
                           const f = e.target.files?.[0] ?? null
                           setEducationFiles((prev) => {
@@ -697,7 +721,7 @@ const LawyerInfo: React.FC = () => {
               <AddressPicker
                 value={{
                   state: form.state,
-                  district: (form as any).district,
+                  district: form.district,
                   city: form.city,
                   pincode: form.pincode,
                 }}
@@ -705,10 +729,10 @@ const LawyerInfo: React.FC = () => {
                   setForm((s) => ({
                     ...s,
                     state: next.state,
+                    district: next.district,
                     city: next.city,
                     pincode: next.pincode,
-                    ...(next.district !== undefined ? { district: next.district } : {}),
-                  } as any))
+                  }))
                 }}
               />
               <div>
@@ -722,10 +746,19 @@ const LawyerInfo: React.FC = () => {
               </div>
             </div>
           ) : (
+            // Read-only summary. District is rendered as a first-class
+            // field next to State because the verification flow keys off
+            // it — without surfacing it here the lawyer couldn't tell
+            // whether their saved address actually feeds the court-admin
+            // lookup.
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               <div>
                 <label className={labelClasses}>City</label>
                 <input disabled value={form.city || ''} className={inputClasses} />
+              </div>
+              <div>
+                <label className={labelClasses}>District</label>
+                <input disabled value={form.district || ''} className={inputClasses} />
               </div>
               <div>
                 <label className={labelClasses}>State</label>
@@ -735,7 +768,7 @@ const LawyerInfo: React.FC = () => {
                 <label className={labelClasses}>Pincode</label>
                 <input disabled value={form.pincode || ''} className={inputClasses} />
               </div>
-              <div>
+              <div className="md:col-span-2">
                 <label className={labelClasses}>Address</label>
                 <input disabled value={form.address || ''} className={inputClasses} />
               </div>

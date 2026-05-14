@@ -3,7 +3,7 @@ import { Plus, Loader2, X, ShieldCheck, AlertCircle, FileText, Sparkles, Refresh
 import ReactMarkdown from 'react-markdown'
 import { appointmentsApi, documentAiApi } from '@/services/api'
 import { friendlyError } from '@/utils/errors'
-import UploadInput from '@/components/atoms/UploadButton'
+import UploadInput, { UploadedFileMeta } from '@/components/atoms/UploadButton'
 import Modal from '@/components/atoms/Modal'
 
 interface AppointmentDoc {
@@ -21,6 +21,12 @@ interface AppointmentDoc {
 
 interface AppointmentDocumentsPanelProps {
   appointmentId: string
+  /**
+   * When true the panel hides the "Upload" CTA. Used on pending consultations
+   * where the lawyer should be deciding accept/reject based on what the
+   * CLIENT already shared, not adding new materials of their own.
+   */
+  readOnly?: boolean
 }
 
 const mimeFromName = (name: string): string => {
@@ -47,7 +53,7 @@ const SUMMARY_PROSE_CLASSES =
   '[&_li]:my-0.5 [&_strong]:font-semibold [&_em]:italic [&_hr]:my-2 [&_hr]:border-gray-200 ' +
   '[&_code]:bg-gray-100 [&_code]:px-1 [&_code]:rounded [&_code]:text-xs'
 
-const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appointmentId }) => {
+const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appointmentId, readOnly = false }) => {
   const [docs, setDocs] = useState<AppointmentDoc[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +61,11 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
   const [uploadOpen, setUploadOpen] = useState(false)
   const [uploadUrl, setUploadUrl] = useState<string | null>(null)
   const [uploadFileName, setUploadFileName] = useState('')
+  // Original file metadata captured at pick-time. We prefer this over
+  // URL-derived mime type because Cloudinary `raw/upload` drops the file
+  // extension by default — a derived "application/octet-stream" makes the
+  // server's OCR dispatcher refuse to process PDFs/DOCX uploads.
+  const [uploadMeta, setUploadMeta] = useState<UploadedFileMeta | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
 
@@ -67,10 +78,18 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
     setError(null)
     try {
       const res = await appointmentsApi.listDocuments(appointmentId)
+      // The server returns `{ items: Document[] }` from
+      // `appointment-document.controller.ts::list`. The previous unwrap
+      // looked for `documents` / `data` first and silently fell through to
+      // the raw `{ items }` object, which then failed `Array.isArray` and
+      // rendered "No documents yet" even when the client had uploaded
+      // files at booking time. Read `items` first.
+      const data = (res.data as any) ?? res
       const list =
-        (res.data as any)?.documents ??
-        (res.data as any)?.data ??
-        (res.data as any) ??
+        data?.items ??
+        data?.documents ??
+        data?.data ??
+        (Array.isArray(data) ? data : []) ??
         []
       setDocs(Array.isArray(list) ? list : [])
     } catch (err) {
@@ -89,6 +108,7 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
     setUploadOpen(false)
     setUploadUrl(null)
     setUploadFileName('')
+    setUploadMeta(null)
     setUploadError(null)
   }
 
@@ -97,11 +117,17 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
     setSaving(true)
     setUploadError(null)
     try {
-      const filename = uploadFileName || uploadUrl.split('/').pop() || 'document'
+      // Prefer the original File's metadata (captured at pick-time). The
+      // URL-derived fallback covers exotic cases where the upload widget
+      // didn't surface the picked file (shouldn't happen in normal flow).
+      const filename =
+        uploadMeta?.filename || uploadFileName || uploadUrl.split('/').pop() || 'document'
+      const mimeType = uploadMeta?.mimeType || mimeFromName(filename)
       const res = await appointmentsApi.addDocument(appointmentId, {
         fileurl: uploadUrl,
         fileName: filename,
-        mimeType: mimeFromName(filename),
+        mimeType,
+        ...(uploadMeta?.size ? { size: uploadMeta.size } : {}),
       })
       const newDoc: AppointmentDoc | undefined =
         (res.data as any)?.document ?? (res.data as any)?.data ?? (res.data as any)
@@ -165,13 +191,15 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
-          <button
-            onClick={() => setUploadOpen(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-700"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Upload
-          </button>
+          {!readOnly && (
+            <button
+              onClick={() => setUploadOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-fuchsia-600 text-white text-xs font-medium hover:bg-fuchsia-700"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Upload
+            </button>
+          )}
         </div>
       </div>
 
@@ -188,7 +216,9 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
         </div>
       ) : docs.length === 0 ? (
         <div className="rounded-lg border border-dashed border-gray-200 p-5 text-center text-xs text-gray-500">
-          No documents yet. Upload a PDF, Word doc, or image — we'll extract the text and generate a structured AI summary automatically.
+          {readOnly
+            ? "The client didn't attach any documents with this consultation request."
+            : "No documents yet. Upload a PDF, Word doc, or image — we'll extract the text and generate a structured AI summary automatically."}
         </div>
       ) : (
         <ul className="space-y-2">
@@ -220,8 +250,19 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
                       </span>
                     )}
                     {doc.extractionStatus === 'FAILED' && (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-red-700 bg-red-50 border border-red-100 px-1.5 py-0.5 rounded">
-                        Extract failed
+                      <span
+                        className="inline-flex items-center gap-1 text-[10px] text-amber-700 bg-amber-50 border border-amber-100 px-1.5 py-0.5 rounded"
+                        title={
+                          // OCR pipeline supports PDF, images, and DOCX
+                          // (see `ocr.service.ts` on the server). Any
+                          // other format (XLSX, PPTX, .doc legacy, ZIP,
+                          // video, …) uploads + stores fine but can't be
+                          // OCR'd. Surface this so users don't think the
+                          // upload itself failed.
+                          'Text extraction is supported for PDF, image, and DOCX files only. The file is still available for download.'
+                        }
+                      >
+                        Preview only
                       </span>
                     )}
                     <span className="text-[10px] text-gray-400">
@@ -326,6 +367,7 @@ const AppointmentDocumentsPanel: FC<AppointmentDocumentsPanelProps> = ({ appoint
                   }
                 }
               }}
+              onFileMeta={setUploadMeta}
               width="full"
             />
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { storageApi } from "../../services/api";
+import { pickCloudinaryResourceType } from "@/utils/cloudinaryUpload";
 
 // =============================================================================
 // UploadInput — picks a file from the device and uploads it directly to
@@ -17,14 +18,42 @@ import { storageApi } from "../../services/api";
 //   3. Hand the resulting `secure_url` back to the caller via setImageUrl.
 // =============================================================================
 
+/**
+ * Metadata captured from the picked File at selection time. Cloudinary's
+ * `raw/upload` endpoint does NOT preserve the original filename / extension
+ * in the returned `secure_url` by default — derive-from-URL gives e.g.
+ * "abcd1234" with no extension, which the server then maps to
+ * `application/octet-stream` and the OCR dispatcher rejects. We hand the
+ * caller the real `file.type` / `file.name` so they can persist the right
+ * mime type on the Document row.
+ */
+export interface UploadedFileMeta {
+  filename: string;
+  mimeType: string;
+  size: number;
+}
+
 const UploadInput = ({
   imageUrl,
   setImageUrl,
   width,
+  onFileMeta,
+  accept,
 }: {
   imageUrl: string | null;
   setImageUrl: React.Dispatch<React.SetStateAction<string | null>>;
   width?: "auto" | "full" | "fixed";
+  /** Optional — invoked with the original File metadata once selected and again with `null` on remove. */
+  onFileMeta?: (meta: UploadedFileMeta | null) => void;
+  /**
+   * MIME / extension filter passed straight to the native file picker.
+   * Defaults to undefined (any file). Pass `"image/*"` for avatar /
+   * profile uploads where only images make sense. Everywhere else we
+   * leave this undefined so the user can attach anything — PDFs, DOCX,
+   * spreadsheets, presentations — and the platform will store + preview
+   * what it can and fall back to download for the rest.
+   */
+  accept?: string;
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploadState, setUploadState] = useState<"idle" | "uploading" | "uploaded" | "error">("idle");
@@ -47,6 +76,13 @@ const UploadInput = ({
       setUploadState("idle");
       setError(null);
       setProgress(0);
+      // Hand the caller the real mime type — URL-derived extensions are
+      // unreliable for Cloudinary `raw` uploads (no extension preserved).
+      onFileMeta?.({
+        filename: selectedFile.name,
+        mimeType: selectedFile.type || "application/octet-stream",
+        size: selectedFile.size,
+      });
 
       // Generate preview for images
       if (selectedFile.type.startsWith("image/")) {
@@ -84,10 +120,14 @@ const UploadInput = ({
       setProgress(30);
 
       // Step 2: POST the file straight to Cloudinary with the signed
-      // params. Cloudinary's /image/upload endpoint rejects non-image
-      // bytes, so PDFs / DOCX / other docs must hit /raw/upload instead.
-      const isImage = (file.type || "").startsWith("image/");
-      const resourceType = isImage ? "image" : "raw";
+      // params. `pickCloudinaryResourceType` keeps PDFs on `image/upload`
+      // (Cloudinary then serves them with `Content-Type: application/pdf`
+      // so the browser's built-in PDF viewer can render them inline);
+      // images go to `image/upload` too; DOCX / XLSX / TXT / ZIP /…
+      // fall through to `raw/upload`. Without the PDF special-case the
+      // file uploads fine but every download throws "Failed to load PDF
+      // document" because Cloudinary defaults raw to octet-stream.
+      const resourceType = pickCloudinaryResourceType(file.type);
 
       const formData = new FormData();
       formData.append("file", file);
@@ -128,6 +168,7 @@ const UploadInput = ({
     setPreview(null);
     setError(null);
     setProgress(0);
+    onFileMeta?.(null);
   };
 
   const getFileIcon = () => {
@@ -151,6 +192,7 @@ const UploadInput = ({
         type="file"
         className="hidden"
         id="fileInput"
+        accept={accept}
         onChange={handleFileChange}
         disabled={uploadState === "uploading"}
       />

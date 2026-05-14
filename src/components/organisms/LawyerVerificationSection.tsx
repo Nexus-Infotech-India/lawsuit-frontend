@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { courtAdminApi } from '@/services/api';
+import { courtAdminApi, usersApi } from '@/services/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useUserStore } from '@/stores/userStore';
 import Button from '@/components/atoms/Button';
-import { CheckCircle, AlertTriangle, Clock, Search, ShieldCheck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, Clock, Search, ShieldCheck, Loader2 } from 'lucide-react';
 
 interface CourtAdmin {
     id: string;
@@ -24,7 +24,17 @@ const LawyerVerificationSection: React.FC = () => {
 
     const [loading, setLoading] = useState(true);
     const [requests, setRequests] = useState<any[]>([]);
-    const [pincode, setPincode] = useState('');
+    // District-based search replaces the earlier pincode-only flow. The
+    // lawyer's `district` / `state` live on the Lawyer row (filled via the
+    // address section of the profile editor), NOT on the User row that
+    // `useAuthStore` / `useUserStore` expose — so we have to hit
+    // `/users/lawyer-information` on mount to read them. Once we have a
+    // district we auto-trigger the search, so the user lands on a fully
+    // populated court-admin list without typing anything.
+    const [district, setDistrict] = useState('');
+    const [stateName, setStateName] = useState('');
+    const [profileLoading, setProfileLoading] = useState(true);
+    const [hasProfileAddress, setHasProfileAddress] = useState(false);
     const [admins, setAdmins] = useState<CourtAdmin[]>([]);
     const [searching, setSearching] = useState(false);
     const [selectedAdminId, setSelectedAdminId] = useState<string>('');
@@ -55,28 +65,83 @@ const LawyerVerificationSection: React.FC = () => {
         }
     }, [isVerified]);
 
-    const handleSearch = async () => {
-        if (!pincode || pincode.length < 6) {
-            setError('Please enter a valid 6-digit pincode');
-            return;
+    // Pull the saved lawyer-info address so we can auto-prefill (and
+    // auto-trigger) the district search. The user can still adjust the
+    // district/state and re-locate if they practice in a different
+    // jurisdiction. We do NOT fall back to `lawyer.pincode` here because
+    // a pincode covers a much narrower area than the district endpoint
+    // expects.
+    useEffect(() => {
+        if (isVerified) return
+        let cancelled = false
+        ;(async () => {
+            setProfileLoading(true)
+            try {
+                const res = await usersApi.getLawyerInformation()
+                const data: any = (res as any).data ?? res
+                const lawyerInfo = data?.lawyer ?? data?.data?.lawyer ?? data?.data ?? data ?? {}
+                const d = String(lawyerInfo?.district || lawyerInfo?.city || '').trim()
+                const s = String(lawyerInfo?.state || '').trim()
+                if (cancelled) return
+                setDistrict(d)
+                setStateName(s)
+                setHasProfileAddress(!!d)
+                if (d) {
+                    // Auto-trigger the search so the lawyer doesn't have
+                    // to click "Locate" when their profile already has an
+                    // address on file.
+                    runSearch(d, s, { silentEmpty: true })
+                }
+            } catch {
+                // Non-fatal — the user can still type a district manually.
+            } finally {
+                if (!cancelled) setProfileLoading(false)
+            }
+        })()
+        return () => {
+            cancelled = true
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isVerified])
 
+    /**
+     * Internal search helper. Separated from `handleSearch` so the
+     * auto-trigger on mount can run with `silentEmpty: true` (no "no
+     * results" error message — we just leave the picker empty so the
+     * user can type a different district).
+     */
+    const runSearch = async (
+        d: string,
+        s: string,
+        opts: { silentEmpty?: boolean } = {},
+    ) => {
         setError('');
         setSearching(true);
         setAdmins([]);
         setSelectedAdminId('');
-
         try {
-            const res = await courtAdminApi.getAdminsByPincode(pincode);
-            setAdmins(res.data.courtAdmins || []);
-            if (res.data.courtAdmins?.length === 0) {
-                setError('No Court Admins found for this pincode.');
+            const res = await courtAdminApi.getAdminsByDistrict(d, s || undefined);
+            const data = (res as any).data ?? res
+            const list = data.courtAdmins || data.admins || data.items || (data ?? [])
+            const admins = Array.isArray(list) ? list : []
+            setAdmins(admins);
+            if (admins.length === 0 && !opts.silentEmpty) {
+                setError('No Court Admins found for that district.');
             }
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to find court admins');
+            setError(err.response?.data?.message || err.response?.data?.error || 'Failed to find court admins');
         } finally {
             setSearching(false);
         }
+    }
+
+    const handleSearch = async () => {
+        const d = district.trim()
+        if (!d) {
+            setError('Please enter your district to locate Court Admins.')
+            return;
+        }
+        await runSearch(d, stateName.trim())
     };
 
     const handleSubmitRequest = async () => {
@@ -93,9 +158,10 @@ const LawyerVerificationSection: React.FC = () => {
             setSuccess('Verification request submitted successfully!');
             fetchMyRequests(); // Refresh the list
             setAdmins([]);
-            setPincode('');
+            // Keep the district/state populated so a rejected re-submit
+            // doesn't force the lawyer to retype their address.
         } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to submit request');
+            setError(err.response?.data?.error || err.response?.data?.message || 'Failed to submit request');
         } finally {
             setSubmitting(false);
         }
@@ -185,27 +251,78 @@ const LawyerVerificationSection: React.FC = () => {
 
                     <div className="bg-gray-50 border border-gray-100 rounded-lg p-6">
                         <h3 className="text-sm font-medium text-gray-900 mb-2">Request Verification</h3>
-                        <p className="text-sm text-gray-500 mb-6">
-                            To get verified, you need to submit your profile to a Court Admin from your local jurisdiction. Enter your pincode below to find nearby Court Admins.
+                        <p className="text-sm text-gray-500 mb-4">
+                            We use the district from your profile address to find court admins in
+                            your jurisdiction. Pick one below to send your verification request.
+                            {' '}
+                            <span className="text-gray-400">
+                                Practicing elsewhere? Edit the district and click <em>Locate</em>.
+                            </span>
                         </p>
 
-                        <div className="flex gap-3 mb-6">
-                            <div className="flex-1">
+                        {/* Loading state for the address pre-fetch. Without
+                            this the user briefly sees an empty form and
+                            might start typing manually before the auto-fill
+                            arrives. */}
+                        {profileLoading ? (
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Reading your saved address…
+                            </div>
+                        ) : !hasProfileAddress ? (
+                            <div className="rounded-md bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800 mb-4">
+                                Your profile doesn't have a district saved yet. Add your office
+                                address in the section above, or type your district below.
+                            </div>
+                        ) : null}
+
+                        <div className="grid grid-cols-1 sm:grid-cols-[2fr_1.5fr_auto] gap-3 mb-6">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">District</label>
                                 <input
                                     type="text"
-                                    placeholder="Enter 6-digit Pincode"
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow"
-                                    value={pincode}
-                                    onChange={(e) => setPincode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    placeholder="e.g. Berhampur"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm"
+                                    value={district}
+                                    onChange={(e) => setDistrict(e.target.value)}
                                     onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                                 />
                             </div>
-                            <Button onClick={handleSearch} disabled={searching || pincode.length !== 6}>
-                                {searching ? 'Search...' : <><Search className="w-4 h-4 mr-2 inline" /> Locate</>}
-                            </Button>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    State <span className="font-normal text-gray-400">(optional)</span>
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. Odisha"
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-sm"
+                                    value={stateName}
+                                    onChange={(e) => setStateName(e.target.value)}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                                />
+                            </div>
+                            <div className="flex items-end">
+                                <Button onClick={handleSearch} disabled={searching || !district.trim()}>
+                                    {searching ? 'Searching…' : <><Search className="w-4 h-4 mr-2 inline" /> Locate</>}
+                                </Button>
+                            </div>
                         </div>
 
+                        {searching && admins.length === 0 && !error && (
+                            <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Finding court admins in {district || 'your district'}…
+                            </div>
+                        )}
+
                         {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+
+                        {!searching && admins.length === 0 && !error && hasProfileAddress && (
+                            <p className="text-sm text-gray-500 mb-4">
+                                No court admins found in {district}. Try adjusting your district
+                                or state above and click <em>Locate</em> again.
+                            </p>
+                        )}
 
                         {admins.length > 0 && (
                             <div className="space-y-4 border-t border-gray-200 pt-6">

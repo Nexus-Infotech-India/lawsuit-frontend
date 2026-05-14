@@ -1,6 +1,6 @@
 import { FC, useMemo, useState } from 'react'
 import { Calendar, Clock, FileText, MessageSquare, User, RefreshCw, XCircle, Video, ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
-import AppointmentDiscussionPanel from '@/components/organisms/AppointmentDiscussionPanel'
+import { useNavigate } from 'react-router-dom'
 import AppointmentDocumentsPanel from '@/components/molecules/AppointmentDocumentsPanel'
 
 interface AppointmentData {
@@ -95,9 +95,13 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
   userRole = 'client',
   onEscalateToCase,
 }) => {
-  const [discussionOpen, setDiscussionOpen] = useState(false)
+  const navigate = useNavigate()
   const [documentsOpen, setDocumentsOpen] = useState(false)
   const otherParty = userRole === 'client' ? appointment.lawyer : appointment.client
+
+  // Where the unified chat lives for this role. Used by both the "Discuss"
+  // action buttons and the renamed "Open Chat" link below.
+  const chatBase = userRole === 'lawyer' ? '/lawyer/chats' : '/app/chats'
 
   const isVideoCallActive = useMemo(() => {
     const now = new Date()
@@ -255,30 +259,21 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
           </>
         )}
       </div>
-      {/* Discussion Thread — expandable */}
+      {/* Open Chat — links to the unified WhatsApp-style chat page,
+          pre-opened on this appointment's conversation. The previous inline
+          AppointmentDiscussionPanel is intentionally removed; everything chat-
+          related lives at /app/chats (or /lawyer/chats) now so there's a
+          single source of truth for messages, read state, and calls. */}
       {
         (appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED') && (
           <div className="mt-3 pt-3 border-t border-gray-100">
             <button
-              onClick={() => setDiscussionOpen(prev => !prev)}
+              onClick={() => navigate(`${chatBase}?appointmentId=${appointment.id}`)}
               className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition"
             >
               <MessageSquare className="w-4 h-4" />
-              Discussion Thread
-              {discussionOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              Open Chat
             </button>
-            {discussionOpen && (
-              <AppointmentDiscussionPanel
-                appointmentId={appointment.id}
-                otherPartyName={otherParty?.name || 'Unknown'}
-                otherPartyRole={userRole === 'client' ? 'Lawyer' : 'Client'}
-                userRole={userRole}
-                onEscalateToCase={onEscalateToCase ? () => onEscalateToCase?.(appointment) : undefined}
-                caseId={appointment.case?.id || null}
-                meetingLink={appointment.meetingLink}
-                appointmentStatus={appointment.status}
-              />
-            )}
           </div>
         )
       }

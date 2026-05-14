@@ -25,7 +25,6 @@ import SearchPage from './pages/app/SearchPage'
 import LawyerDetailPage from './pages/app/LawyerDetailPage'
 import BookingPage from './pages/app/BookingPage'
 import AppointmentsPage from './pages/app/AppointmentsPage'
-// import CasesListPage from './pages/app/CasesListPage'
 import CaseDetailPage from './pages/app/CaseDetailPage'
 import WalletPage from './pages/app/WalletPage'
 import WithdrawPage from './pages/app/WithdrawPage'
@@ -109,6 +108,7 @@ import OrganizationMySalaryPage from './pages/organization/OrganizationMySalaryP
 // Shared (Client + Lawyer): standalone chat list and document AI workspace
 import ChatListPage from './pages/shared/ChatListPage'
 import DocumentAiPage from './pages/shared/DocumentAiPage'
+import DocumentPreviewPage from './pages/shared/DocumentPreviewPage'
 
 // Client-side firm discovery
 import FirmsListPage from './pages/app/firms/FirmsListPage'
@@ -177,6 +177,14 @@ const AppRoutes = () => {
 
       {/* Mediation invite link (public; acts based on auth) */}
       <Route path="/mediation/invite/:token" element={<MediationInviteAcceptPage />} />
+
+      {/* Universal document preview. Renders any uploaded asset URL using
+          <embed type="application/pdf"> for PDFs (so Cloudinary `raw`
+          URLs preview correctly regardless of HTTP Content-Type), <img>
+          for images, and a download card for everything else. Mounted at
+          the top level so every role can link to it without role-prefix
+          churn (`/preview?url=…&name=…&mime=…`). */}
+      <Route path="/preview" element={<DocumentPreviewPage />} />
 
       {/* Protected App Routes */}
       <Route
@@ -288,6 +296,15 @@ const AppRoutes = () => {
         <Route path="my-salary" element={<OrganizationMySalaryPage />} />
         <Route path="requests" element={<OrganizationRequestsPage />} />
         <Route path="verification" element={<OrganizationVerificationPage />} />
+        {/* Unified WhatsApp-style chat — same page as /app/chats and
+            /lawyer/chats; server-side rolled-up list is JWT-filtered so the
+            org head sees their own conversations. */}
+        <Route path="chats" element={<ChatListPage />} />
+        {/* Document AI workspace — same component as /app/document-ai.
+            Mounted here so chat doc-chips can deep-link via
+            `/organization/document-ai?documentId=…` instead of being
+            bounced to a /app route the org layout doesn't render. */}
+        <Route path="document-ai" element={<DocumentAiPage />} />
       </Route>
 
       {/* Admin Routes */}
@@ -323,6 +340,13 @@ const AppRoutes = () => {
         <Route path="organizations/:id/activity" element={<AdminOrganizationActivityPage />} />
         <Route path="court-admins/:id/activity" element={<AdminCourtAdminActivityPage />} />
         <Route path="announcements" element={<AdminAnnouncementsPage />} />
+        {/* Unified WhatsApp-style chat — admins see conversations they're a
+            participant in (e.g. support threads). Same page as the other
+            roles, the server filters by JWT. */}
+        <Route path="chats" element={<ChatListPage />} />
+        {/* Document AI workspace — admins occasionally need to open docs
+            shared from chat support threads. */}
+        <Route path="document-ai" element={<DocumentAiPage />} />
 
         <Route path="under-development" element={<UnderDevelopmentPlaceholder />} />
       </Route>
@@ -392,6 +416,10 @@ const AppRoutes = () => {
         <Route path="organization-verifications" element={<OrganizationVerificationsPage />} />
         <Route path="salary" element={<CourtAdminSalaryPage />} />
         <Route path="profile" element={<CourtAdminProfilePage />} />
+        {/* Document AI — court admins rarely need this but a chat doc chip
+            deep-links here when they happen to receive one in a support
+            thread, so we mount it to prevent a dead-link redirect. */}
+        <Route path="document-ai" element={<DocumentAiPage />} />
       </Route>
 
       {/* Fallback route */}

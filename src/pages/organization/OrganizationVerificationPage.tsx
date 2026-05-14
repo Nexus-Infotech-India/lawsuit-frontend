@@ -1,7 +1,8 @@
-import { FC, useEffect, useState } from 'react'
+import { FC, useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import Button from '@/components/atoms/Button'
 import { useOrganizationStore } from '@/stores/organizationStore'
+import { courtAdminApi } from '@/services/api'
 
 const OrganizationVerificationPage: FC = () => {
   const navigate = useNavigate()
@@ -12,6 +13,12 @@ const OrganizationVerificationPage: FC = () => {
   const requestVerification = useOrganizationStore((s) => s.requestVerification)
   const loadingCourtAdmins = useOrganizationStore((s) => s.loadingCourtAdmins)
 
+  // District-wide fallback admins. The store's `eligibleCourtAdmins` is the
+  // server's pincode-match list — narrow by design — but a single pincode
+  // covers a tiny slice of a district so the list is often empty. We pull
+  // the wider district set so the org head still has someone to send the
+  // verification to.
+  const [districtAdmins, setDistrictAdmins] = useState<any[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -21,6 +28,38 @@ const OrganizationVerificationPage: FC = () => {
     fetchMe().catch(() => { })
     fetchEligibleCourtAdmins().catch(() => { })
   }, [fetchMe, fetchEligibleCourtAdmins])
+
+  // When the pincode-narrow list comes back empty, fall back to district.
+  useEffect(() => {
+    if (!me?.district) return
+    if (eligibleCourtAdmins && eligibleCourtAdmins.length > 0) return
+    let cancelled = false
+    courtAdminApi
+      .getAdminsByDistrict(me.district, me.state)
+      .then((res) => {
+        if (cancelled) return
+        const data = (res as any).data?.data ?? (res as any).data ?? []
+        setDistrictAdmins(Array.isArray(data) ? data : [])
+      })
+      .catch(() => !cancelled && setDistrictAdmins([]))
+    return () => {
+      cancelled = true
+    }
+  }, [me?.district, me?.state, eligibleCourtAdmins])
+
+  // Merge — dedupe by id, pincode matches first.
+  const combinedAdmins = useMemo(() => {
+    const seen = new Set<string>()
+    const merged: any[] = []
+    for (const list of [eligibleCourtAdmins, districtAdmins]) {
+      for (const a of list ?? []) {
+        if (!a?.id || seen.has(a.id)) continue
+        seen.add(a.id)
+        merged.push(a)
+      }
+    }
+    return merged
+  }, [eligibleCourtAdmins, districtAdmins])
 
   if (me?.isVerified) {
     return (
@@ -90,36 +129,44 @@ const OrganizationVerificationPage: FC = () => {
 
             {loadingCourtAdmins ? (
               <div className="p-8 text-center text-gray-500 text-sm">Loading…</div>
-            ) : eligibleCourtAdmins.length === 0 ? (
+            ) : combinedAdmins.length === 0 ? (
               <div className="p-8 text-center text-gray-500 text-sm">
-                No court admin matches your pincode yet. Please check back later.
+                No court admin matches your pincode or district yet. Please check back later, or update your firm's address in
+                {' '}<Link to="/organization/profile" className="text-indigo-600 hover:underline">your profile</Link>.
               </div>
             ) : (
-              <ul className="divide-y divide-gray-100">
-                {eligibleCourtAdmins.map((ca: any) => (
-                  <li
-                    key={ca.id}
-                    onClick={() => setSelectedId(ca.id)}
-                    className={`px-4 py-3 cursor-pointer transition ${selectedId === ca.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : 'hover:bg-gray-50'}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{ca.name}</p>
-                        <p className="text-xs text-gray-500">{ca.email}</p>
-                        {ca.court?.name && (
-                          <p className="text-xs text-gray-500 mt-0.5">{ca.court.name} · {ca.court.city || ca.court.district}</p>
-                        )}
+              <>
+                {eligibleCourtAdmins.length === 0 && districtAdmins.length > 0 && (
+                  <div className="px-4 py-2 text-xs text-gray-500 bg-amber-50 border-b border-amber-100">
+                    No exact pincode match — showing court admins across your district instead.
+                  </div>
+                )}
+                <ul className="divide-y divide-gray-100">
+                  {combinedAdmins.map((ca: any) => (
+                    <li
+                      key={ca.id}
+                      onClick={() => setSelectedId(ca.id)}
+                      className={`px-4 py-3 cursor-pointer transition ${selectedId === ca.id ? 'bg-indigo-50 border-l-4 border-indigo-500' : 'hover:bg-gray-50'}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">{ca.name}</p>
+                          <p className="text-xs text-gray-500">{ca.email}</p>
+                          {ca.court?.name && (
+                            <p className="text-xs text-gray-500 mt-0.5">{ca.court.name} · {ca.court.city || ca.court.district}</p>
+                          )}
+                        </div>
+                        <input
+                          type="radio"
+                          checked={selectedId === ca.id}
+                          onChange={() => setSelectedId(ca.id)}
+                          className="text-primary"
+                        />
                       </div>
-                      <input
-                        type="radio"
-                        checked={selectedId === ca.id}
-                        onChange={() => setSelectedId(ca.id)}
-                        className="text-primary"
-                      />
-                    </div>
-                  </li>
-                ))}
-              </ul>
+                    </li>
+                  ))}
+                </ul>
+              </>
             )}
           </div>
 

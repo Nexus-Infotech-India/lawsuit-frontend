@@ -1,12 +1,22 @@
 import { FC, useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Bell } from 'lucide-react';
 import { useCourtAdminStore } from '../stores/courtAdminStore';
+import { useNotificationStore } from '../stores/notificationStore';
+import { useNotificationSocket } from '../hooks/useNotificationSocket';
+import NotificationModal from '../components/molecules/NotificationModal';
 import ErrorBoundary from '../components/organisms/ErrorBoundary';
 
 const CourtAdminLayout: FC = () => {
     const [collapsed, setCollapsed] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
     const { logout, user } = useCourtAdminStore();
+    const unreadCount = useNotificationStore((s) => s.unreadCount);
     const navigate = useNavigate();
+
+    // Subscribe to the notification socket so live updates land in this
+    // layout the same way they do for every other role.
+    useNotificationSocket();
 
     const handleLogout = () => {
         logout();
@@ -113,6 +123,24 @@ const CourtAdminLayout: FC = () => {
                         </div>
 
                         <div className="flex items-center gap-4">
+                            {/* Notification bell — same pattern as AdminLayout
+                                so court admins see verification, salary, and
+                                organization-event notifications surface here
+                                and tap-to-redirect routes via the COURT_ADMIN
+                                branch of resolveRoute in NotificationModal. */}
+                            <button
+                                onClick={() => setShowNotifications(true)}
+                                className="relative p-2 rounded-md text-gray-600 hover:bg-gray-100"
+                                title="Notifications"
+                                aria-label="Notifications"
+                            >
+                                <Bell className="w-5 h-5" />
+                                {unreadCount > 0 && (
+                                    <span className="absolute top-1 right-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-semibold text-white bg-red-600 rounded-full">
+                                        {unreadCount > 99 ? '99+' : unreadCount}
+                                    </span>
+                                )}
+                            </button>
                             {/* Profile placeholder */}
                             <div className="flex items-center gap-3">
                                 <span className="text-sm font-medium text-gray-700 hidden sm:block">{user?.name || 'Admin'}</span>
@@ -130,6 +158,7 @@ const CourtAdminLayout: FC = () => {
                     </ErrorBoundary>
                 </main>
             </div>
+            <NotificationModal open={showNotifications} onClose={() => setShowNotifications(false)} />
         </div>
     );
 };

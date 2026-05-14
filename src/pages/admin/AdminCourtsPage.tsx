@@ -2,6 +2,7 @@ import { FC, useEffect, useState } from 'react'
 import { Plus, Edit2, Trash2, Loader2, X, Landmark, Search } from 'lucide-react'
 import { adminCourtApi } from '@/services/api'
 import { unwrapList } from '@/utils/unwrap'
+import AddressPicker from '@/components/molecules/AddressPicker'
 
 interface Court {
   id: string
@@ -202,42 +203,27 @@ const AdminCourtsPage: FC = () => {
                     <option value="OTHER">Other</option>
                   </select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Pincode</label>
-                  <input
-                    value={editing.pincode || ''}
-                    onChange={(e) => setEditing({ ...editing, pincode: e.target.value.replace(/\D/g, '') })}
-                    maxLength={6}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">State</label>
-                  <input
-                    value={editing.state || ''}
-                    onChange={(e) => setEditing({ ...editing, state: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">District</label>
-                  <input
-                    value={editing.district || ''}
-                    onChange={(e) => setEditing({ ...editing, district: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">City</label>
-                <input
-                  value={editing.city || ''}
-                  onChange={(e) => setEditing({ ...editing, city: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
-                />
-              </div>
+              {/* Pincode → state/district/city auto-fill. Multi-match
+                  pincodes (metros / large districts) surface a picker so
+                  the admin can choose the right locality. */}
+              <AddressPicker
+                value={{
+                  pincode: editing.pincode,
+                  state: editing.state,
+                  district: editing.district,
+                  city: editing.city,
+                }}
+                onChange={(next) =>
+                  setEditing({
+                    ...editing,
+                    pincode: next.pincode,
+                    state: next.state,
+                    district: next.district,
+                    city: next.city,
+                  })
+                }
+              />
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Address</label>
                 <textarea

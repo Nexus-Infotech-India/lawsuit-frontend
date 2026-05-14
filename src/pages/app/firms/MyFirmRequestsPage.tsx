@@ -120,6 +120,19 @@ const MyFirmRequestsPage: FC = () => {
                   <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${badgeClasses(r.status)}`}>
                     {r.status}
                   </span>
+                  {/* Pay-now resumes a stuck Razorpay checkout. The flow is:
+                      1) client books → server creates PENDING Payment + Razorpay
+                         order, returns providerOrderId; 2) client closes the
+                         modal without paying → request stays PENDING with a
+                         PENDING payment. We surface "Pay now" whenever the
+                         payment row exists, is still PENDING, and has a
+                         provider order to reopen. Hidden once payment.status
+                         flips to COMPLETED. */}
+                  {r.payment?.status === 'PENDING' && r.payment.providerOrderId && (
+                    <Button size="sm" onClick={() => handlePay(r.id)} disabled={busyId === r.id}>
+                      {busyId === r.id ? 'Opening…' : 'Pay now'}
+                    </Button>
+                  )}
                   {r.status === 'PENDING' && (
                     <Button
                       size="sm"
@@ -129,11 +142,6 @@ const MyFirmRequestsPage: FC = () => {
                       disabled={busyId === r.id}
                     >
                       Cancel
-                    </Button>
-                  )}
-                  {r.status === 'ASSIGNED' && r.appointment?.paymentId && !r.appointment?.id && (
-                    <Button size="sm" onClick={() => handlePay(r.id)} disabled={busyId === r.id}>
-                      Pay now
                     </Button>
                   )}
                 </div>

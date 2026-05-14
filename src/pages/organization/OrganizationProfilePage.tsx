@@ -2,6 +2,7 @@ import { FC, useEffect, useState } from 'react'
 import Button from '@/components/atoms/Button'
 import { useOrganizationStore } from '@/stores/organizationStore'
 import { uploadToCloudinary } from '@/utils/cloudinaryUpload'
+import AddressPicker from '@/components/molecules/AddressPicker'
 
 type FormShape = {
   name: string
@@ -84,7 +85,13 @@ const OrganizationProfilePage: FC = () => {
     if (!file) return
     try {
       setUploading({ field })
-      const url = await uploadToCloudinary(file)
+      // Non-avatar fields are statutory documents (PAN cert, GST proof,
+      // registration certificate) — almost always PDFs. The uploader
+      // auto-picks `raw` vs `image` based on mime, but we also scope the
+      // Cloudinary folder so docs don't pollute the profile folder and
+      // the server can apply doc-specific retention/permissions later.
+      const isAvatar = field === 'avatarUrl'
+      const url = await uploadToCloudinary(file, isAvatar ? {} : { folder: 'documents' })
       setForm((s) => ({ ...s, [field]: url } as FormShape))
     } catch (err: any) {
       alert(err?.message || 'Upload failed')
@@ -226,17 +233,37 @@ const OrganizationProfilePage: FC = () => {
 
       <Section title="Address">
         <Field label="Country" name="country" value={form.country} onChange={handleChange} />
-        <Field label="State" name="state" value={form.state} onChange={handleChange} />
-        <Field label="District" name="district" value={form.district} onChange={handleChange} />
-        <Field label="City" name="city" value={form.city} onChange={handleChange} />
-        <Field label="Pincode" name="pincode" value={form.pincode} onChange={handleChange} placeholder="6 digits" />
         <div className="sm:col-span-2">
-          <label className="block text-sm font-medium text-gray-700">Address</label>
+          {/* AddressPicker auto-fills state/district/city from the pincode
+              (and offers a locality picker when one pincode maps to
+              multiple post offices). The 4 fields are saved back into
+              the existing FormShape on every change. */}
+          <AddressPicker
+            value={{
+              pincode: form.pincode,
+              state: form.state,
+              district: form.district,
+              city: form.city,
+            }}
+            onChange={(next) =>
+              setForm((s) => ({
+                ...s,
+                pincode: next.pincode || '',
+                state: next.state || '',
+                district: next.district || '',
+                city: next.city || '',
+              }))
+            }
+          />
+        </div>
+        <div className="sm:col-span-2">
+          <label className="block text-sm font-medium text-gray-700">Street address</label>
           <textarea
             name="address"
             rows={2}
             value={form.address}
             onChange={handleChange}
+            placeholder="Street, building, landmark"
             className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-primary focus:border-primary sm:text-sm"
           />
         </div>
@@ -292,7 +319,6 @@ const FileUploadField: FC<{
     <div className="mt-1 flex items-center gap-3">
       <input
         type="file"
-        accept="image/*,application/pdf"
         onChange={(e) => onUpload(e.target.files?.[0])}
         className="text-sm"
       />

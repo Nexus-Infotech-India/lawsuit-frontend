@@ -1,13 +1,13 @@
 import api, { apiEndpoints } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { 
-    FileText, 
-    Clock, 
-    Scale, 
-    MessageSquare, 
-    FolderOpen, 
+import {
+    FileText,
+    Clock,
+    Scale,
+    MessageSquare,
+    FolderOpen,
     CheckSquare,
     User,
     Mail,
@@ -18,7 +18,6 @@ import {
 import CaseInfo from "@/components/atoms/CaseInfo";
 import CaseTimeline from "@/components/atoms/CaseTimeline";
 import CaseHearings from "@/components/atoms/CaseHearings";
-import ChatTab from "@/components/atoms/ChatTab";
 import DocumentsTab from "@/components/atoms/DocumentsTab";
 import TasksTab from "@/components/atoms/TasksTab";
 import CaseClosureInfo from "@/components/atoms/CaseClosureInfo";
@@ -72,7 +71,8 @@ type MenuItem = 'case-info' | 'timeline' | 'hearings' | 'chat' | 'documents' | '
 export default function CaseDetailsClientPage() {
     const [activeMenu, setActiveMenu] = useState<MenuItem>('case-info');
     const { caseId } = useParams<{ caseId: string }>();
-    
+    const navigate = useNavigate();
+
     if (!caseId) return <div>case id not found</div>;
 
     const getCaseDetailsQuery = useQuery({
@@ -128,8 +128,10 @@ export default function CaseDetailsClientPage() {
                 return <CaseTimeline caseId={caseData.id} />;
             case 'hearings':
                 return <CaseHearings caseId={caseData.id} />;
-            case 'chat':
-                return <ChatTab caseId={caseData.id} />;
+            // 'chat' is intentionally not rendered here — clicking the Chat
+            // menu item navigates the user to the unified /app/chats page
+            // pre-opened on the lawyer they're collaborating with. See the
+            // onClick handler in the sidebar nav below.
             case 'documents':
                 return <DocumentsTab caseId={caseData.id} />;
             case 'tasks':
@@ -200,12 +202,30 @@ export default function CaseDetailsClientPage() {
                             return (
                                 <li key={item.id}>
                                     <button
-                                        onClick={() => setActiveMenu(item.id)}
+                                        onClick={() => {
+                                            // The Chat tab routes to the
+                                            // unified WhatsApp-style chat
+                                            // page pre-opened on this case's
+                                            // lawyer. Falling back to the
+                                            // chats list when there's no
+                                            // assigned lawyer yet.
+                                            if (item.id === 'chat') {
+                                                if (lawyer?.id) {
+                                                    navigate(
+                                                        `/app/chats?with=${lawyer.id}&caseId=${caseData.id}`,
+                                                    );
+                                                } else {
+                                                    navigate('/app/chats');
+                                                }
+                                                return;
+                                            }
+                                            setActiveMenu(item.id);
+                                        }}
                                         className={`
                                             w-full flex items-center gap-3 px-4 py-3 rounded-lg
                                             transition-all duration-200 text-left
-                                            ${isActive 
-                                                ? 'bg-primary text-white' 
+                                            ${isActive
+                                                ? 'bg-primary text-white'
                                                 : 'text-gray-700 hover:bg-gray-100'
                                             }
                                         `}

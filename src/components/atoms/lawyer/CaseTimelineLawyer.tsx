@@ -54,7 +54,14 @@ export default function CaseTimelineLawyer({caseId}: {caseId: string}) {
         }
     })
 
-    const timelineEvents = timelineResponse?.data
+    // Sort chronologically — server now orders by eventDate asc, but defend
+    // the UI against any insertion-order bug or future server change so a row
+    // added for May 5 after May 6 still lands above May 6 visually.
+    const timelineEvents = (timelineResponse?.data ?? [])
+        .slice()
+        .sort((a: any, b: any) =>
+            new Date(a.eventDate).getTime() - new Date(b.eventDate).getTime(),
+        )
 
     const onSubmit = (data: CreateTimelineEventSchema) => {
         console.log('Submitting timeline event:', data);

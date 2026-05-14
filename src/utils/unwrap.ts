@@ -26,9 +26,13 @@ export function unwrapList<T = any>(
     if (Array.isArray(v)) return v as T[]
   }
 
-  // Fallbacks — most server-side list controllers use `items`.
+  // Fallbacks — most server-side list controllers use `items`, but the chat
+  // and a few legacy controllers return `{ chats: [...] }` or `{ messages: [...] }`.
+  // Adding them here keeps callers from having to repeat the candidate key.
   if (Array.isArray(root.items)) return root.items as T[]
   if (Array.isArray(root.data)) return root.data as T[]
+  if (Array.isArray(root.chats)) return root.chats as T[]
+  if (Array.isArray(root.messages)) return root.messages as T[]
   if (root.data && Array.isArray(root.data.items)) return root.data.items as T[]
   return []
 }

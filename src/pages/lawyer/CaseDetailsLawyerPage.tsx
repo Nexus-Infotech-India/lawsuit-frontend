@@ -1,13 +1,13 @@
 import api, { apiEndpoints } from "@/services/api";
 import { useQuery } from "@tanstack/react-query";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
-import { 
-    FileText, 
-    Clock, 
-    Scale, 
-    MessageSquare, 
-    FolderOpen, 
+import {
+    FileText,
+    Clock,
+    Scale,
+    MessageSquare,
+    FolderOpen,
     CheckSquare,
     User,
     Mail,
@@ -18,9 +18,8 @@ import {
     XOctagon
 } from "lucide-react";
 import CaseInfo from "@/components/atoms/CaseInfo";
-import CaseTimeline from "@/components/atoms/CaseTimeline";
-import CaseHearings from "@/components/atoms/CaseHearings";
-import ChatTab from "@/components/atoms/ChatTab";
+// CaseTimeline / CaseHearings are kept for the lawyer page as the
+// lawyer-specific editable variants below.
 import DocumentsTab from "@/components/atoms/DocumentsTab";
 import TasksTab from "@/components/atoms/TasksTab";
 import ResolutionTab from "@/components/atoms/ResolutionTab";
@@ -79,7 +78,8 @@ export default function CaseDetailsClientPage() {
     const [activeMenu, setActiveMenu] = useState<MenuItem>('case-info');
     const [showClosureModal, setShowClosureModal] = useState(false);
     const { caseId } = useParams<{ caseId: string }>();
-    
+    const navigate = useNavigate();
+
     if (!caseId) return <div>case id not found</div>;
 
     const getCaseDetailsQuery = useQuery({
@@ -138,8 +138,11 @@ export default function CaseDetailsClientPage() {
                 return <CaseTimelineLawyer caseId={caseData.id} />;
             case 'hearings':
                 return <CaseHearingsLawyer caseId={caseData.id} />;
-            case 'chat':
-                return <ChatTab caseId={caseData.id} />;
+            // 'chat' redirects to the unified /lawyer/chats page instead of
+            // rendering inline — the click handler on the menu button below
+            // navigates there. Falling through to the default keeps Case Info
+            // visible if the user lands here with activeMenu === 'chat' for
+            // any reason.
             case 'documents':
                 return <DocumentsTab caseId={caseData.id} />;
             case 'tasks':
@@ -212,12 +215,27 @@ export default function CaseDetailsClientPage() {
                             return (
                                 <li key={item.id}>
                                     <button
-                                        onClick={() => setActiveMenu(item.id)}
+                                        onClick={() => {
+                                            // Chat tab routes to the unified
+                                            // /lawyer/chats page, pre-opened
+                                            // on the client for this case.
+                                            if (item.id === 'chat') {
+                                                if (client?.id) {
+                                                    navigate(
+                                                        `/lawyer/chats?with=${client.id}&caseId=${caseData.id}`,
+                                                    );
+                                                } else {
+                                                    navigate('/lawyer/chats');
+                                                }
+                                                return;
+                                            }
+                                            setActiveMenu(item.id);
+                                        }}
                                         className={`
                                             w-full flex items-center gap-3 px-4 py-3 rounded-lg
                                             transition-all duration-200 text-left
-                                            ${isActive 
-                                                ? 'bg-primary text-white' 
+                                            ${isActive
+                                                ? 'bg-primary text-white'
                                                 : 'text-gray-700 hover:bg-gray-100'
                                             }
                                         `}

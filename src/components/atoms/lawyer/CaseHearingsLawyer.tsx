@@ -1,23 +1,25 @@
 import { addHearingSchema, AddHearingSchema } from "@/schema/case.schema"
-import api, { apiEndpoints } from "@/services/api"
+import api, { apiEndpoints, casesExtApi } from "@/services/api"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { format } from "date-fns"
-import { 
-    Plus, 
-    X, 
-    Calendar, 
-    Scale, 
-    User, 
-    FileText, 
-    Clock, 
+import {
+    Plus,
+    X,
+    Calendar,
+    Scale,
+    User,
+    FileText,
+    Clock,
     Gavel,
     MapPin,
     Loader2,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    Pencil,
+    Trash2
 } from "lucide-react"
 
 interface Hearing {
@@ -41,6 +43,9 @@ type HearingFormData = AddHearingSchema['body']
 
 export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
     const [isModalOpen, setIsModalOpen] = useState(false)
+    // Track which hearing is being edited (if any). When non-null the modal
+    // opens in "edit" mode, calling PUT /cases/hearings/:id on save.
+    const [editingHearing, setEditingHearing] = useState<Hearing | null>(null)
     const queryClient = useQueryClient()
 
     const { register, handleSubmit, formState: { errors, isSubmitting }, reset } = useForm<HearingFormData>({
@@ -69,6 +74,52 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
         }
     })
 
+    const updateHearingMutation = useMutation({
+        mutationFn: async ({ id, payload }: { id: string; payload: HearingFormData }) => {
+            const res = await casesExtApi.updateHearing(id, payload as any)
+            return res.data
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['case-hearings', caseId] })
+            setIsModalOpen(false)
+            setEditingHearing(null)
+            reset()
+        },
+        onError: (error: any) => {
+            alert('Error updating hearing: ' + (error?.response?.data?.error || error.message))
+        }
+    })
+
+    const deleteHearingMutation = useMutation({
+        mutationFn: async (id: string) => {
+            const res = await casesExtApi.deleteHearing(id)
+            return res.data
+        },
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['case-hearings', caseId] }),
+        onError: (error: any) =>
+            alert('Error deleting hearing: ' + (error?.response?.data?.error || error.message)),
+    })
+
+    const startEdit = (h: Hearing) => {
+        setEditingHearing(h)
+        // Prefill the existing form fields so the modal pops with the
+        // hearing's current values instead of a blank slate.
+        reset({
+            date: new Date(h.date).toISOString().slice(0, 16) as any,
+            court: h.court ?? '',
+            judge: h.judge ?? '',
+            purpose: h.purpose ?? '',
+            notes: h.notes ?? '',
+        } as any)
+        setIsModalOpen(true)
+    }
+
+    const closeModal = () => {
+        setIsModalOpen(false)
+        setEditingHearing(null)
+        reset()
+    }
+
     const getHearingQuery = useQuery({
         queryKey: ['case-hearings', caseId],
         queryFn: async () => {
@@ -80,7 +131,11 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
     const hearings = getHearingQuery.data?.data || []
 
     const onSubmit = (data: HearingFormData) => {
-        createHearingMutation.mutate(data)
+        if (editingHearing) {
+            updateHearingMutation.mutate({ id: editingHearing.id, payload: data })
+        } else {
+            createHearingMutation.mutate(data)
+        }
     }
 
     const getOutcomeStyle = (outcome: string | null) => {
@@ -221,7 +276,7 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
                                         </div>
                                     </div>
 
-                                    {/* Right Section - Outcome */}
+                                    {/* Right Section - Outcome + Edit/Delete */}
                                     <div className="flex sm:flex-col items-center sm:items-end gap-2">
                                         <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium ${outcomeStyle.bg} ${outcomeStyle.text}`}>
                                             {hearing.outcome ? (
@@ -237,6 +292,27 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
                                             )}
                                             {outcomeStyle.label}
                                         </span>
+                                        <div className="flex gap-1">
+                                            <button
+                                                onClick={() => startEdit(hearing)}
+                                                className="p-1.5 text-gray-500 hover:text-primary hover:bg-primary/5 rounded-md transition-colors"
+                                                title="Edit hearing"
+                                            >
+                                                <Pencil className="w-3.5 h-3.5" />
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    if (confirm('Delete this hearing? This cannot be undone.')) {
+                                                        deleteHearingMutation.mutate(hearing.id)
+                                                    }
+                                                }}
+                                                disabled={deleteHearingMutation.isPending}
+                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors disabled:opacity-50"
+                                                title="Delete hearing"
+                                            >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -249,26 +325,30 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
             {isModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     {/* Backdrop */}
-                    <div 
+                    <div
                         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                        onClick={() => setIsModalOpen(false)}
+                        onClick={closeModal}
                     />
-                    
+
                     {/* Modal */}
                     <div className="relative bg-white w-full max-w-md rounded-xl shadow-2xl overflow-hidden">
-                        {/* Header */}
+                        {/* Header — title swaps to "Edit hearing" when editing an existing row */}
                         <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gradient-to-r from-primary/5 to-transparent">
                             <div className="flex items-center gap-3">
                                 <div className="p-2 bg-primary/10 rounded-lg">
                                     <Gavel className="w-5 h-5 text-primary" />
                                 </div>
                                 <div>
-                                    <h2 className="text-sm font-semibold text-midnight">Schedule Hearing</h2>
-                                    <p className="text-xs text-gray-500">Add a new court hearing date</p>
+                                    <h2 className="text-sm font-semibold text-midnight">
+                                        {editingHearing ? 'Edit Hearing' : 'Schedule Hearing'}
+                                    </h2>
+                                    <p className="text-xs text-gray-500">
+                                        {editingHearing ? 'Update court hearing details' : 'Add a new court hearing date'}
+                                    </p>
                                 </div>
                             </div>
                             <button
-                                onClick={() => setIsModalOpen(false)}
+                                onClick={closeModal}
                                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
                             >
                                 <X className="w-5 h-5" />
@@ -356,20 +436,25 @@ export default function CaseHearingsLawyer({caseId}: {caseId: string}) {
                             <div className="flex gap-3 pt-2">
                                 <button
                                     type="button"
-                                    onClick={() => setIsModalOpen(false)}
+                                    onClick={closeModal}
                                     className="flex-1 px-4 py-2.5 text-xs font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={createHearingMutation.isPending || isSubmitting}
+                                    disabled={createHearingMutation.isPending || updateHearingMutation.isPending || isSubmitting}
                                     className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-medium text-white bg-primary rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    {createHearingMutation.isPending ? (
+                                    {createHearingMutation.isPending || updateHearingMutation.isPending ? (
                                         <>
                                             <Loader2 className="w-4 h-4 animate-spin" />
                                             Saving...
+                                        </>
+                                    ) : editingHearing ? (
+                                        <>
+                                            <Pencil className="w-4 h-4" />
+                                            Save changes
                                         </>
                                     ) : (
                                         <>

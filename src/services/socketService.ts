@@ -12,6 +12,8 @@ import type {
   CallCancelledEvent,
   CallEndedEvent,
   CallErrorEvent,
+  CallRoomReadyEvent,
+  CallRoomStateEvent,
 } from '@/types/video'
 
 // Socket connects to the same host as the API. Naked hostnames in
@@ -48,12 +50,28 @@ type RtcOfferHandler = (e: WebRTCOfferEvent) => void
 type RtcAnswerHandler = (e: WebRTCAnswerEvent) => void
 type RtcIceCandidateHandler = (e: WebRTCIceCandidateEvent) => void
 
+/**
+ * A document row attached to a chat message. The server materialises one of
+ * these per uploaded file (so the chip in chat is linkable into the
+ * document-AI / OCR / summary surfaces).
+ */
+export interface ChatDocument {
+  id: string
+  filename?: string | null
+  mimeType?: string | null
+  url: string
+  size?: number | null
+}
+
 export interface ChatMessage {
   id: string
   chatId: string
   senderId: string
   text?: string | null
+  /** Legacy bare-URL array — kept for backwards compatibility. */
   attachments?: string[]
+  /** Strongly-typed document rows (preferred). */
+  documents?: ChatDocument[]
   isRead: boolean
   readAt?: string | null
   createdAt: string
@@ -82,6 +100,9 @@ class SocketService {
   private callEndedHandlers: CallEndedHandler[] = []
   private callCancelledHandlers: CallCancelledHandler[] = []
   private callErrorHandlers: CallErrorHandler[] = []
+  // Shared-room (Daily-room-per-chat) handlers — preferred flow.
+  private callRoomReadyHandlers: ((e: CallRoomReadyEvent) => void)[] = []
+  private callRoomStateHandlers: ((e: CallRoomStateEvent) => void)[] = []
 
   // WebRTC fallback handlers
   private rtcUserJoinedHandlers: RtcUserJoinedHandler[] = []
@@ -239,6 +260,19 @@ class SocketService {
     this.socket.on('call:error', (data: CallErrorEvent) => {
       console.error('Call error:', data)
       this.callErrorHandlers.forEach((handler) => handler(data))
+    })
+
+    // ─── Shared-room flow ────────────────────────────────────────
+    // Direct reply to `call:room:ensure` — carries the per-user
+    // meeting token and the Daily room URL the caller should join.
+    this.socket.on('call:room:ready', (data: CallRoomReadyEvent) => {
+      this.callRoomReadyHandlers.forEach((h) => h(data))
+    })
+    // Broadcast to every socket in `chat_<chatId>` whenever the room's
+    // active-state or participant count changes. The chat-level CTA
+    // ("Start" vs "Join") and the participant counter read from here.
+    this.socket.on('call:room:state', (data: CallRoomStateEvent) => {
+      this.callRoomStateHandlers.forEach((h) => h(data))
     })
 
     // ─────────────────────────────────────────────────────────────────────
@@ -458,6 +492,74 @@ class SocketService {
     this.callErrorHandlers.push(handler)
     return () => {
       this.callErrorHandlers = this.callErrorHandlers.filter((h) => h !== handler)
+    }
+  }
+
+  // ─── Shared-room emitters ───────────────────────────────────────────
+  /**
+   * Ask the server to ensure a Daily room exists for this chat and
+   * return a per-user meeting token. Triggers a broadcast of
+   * `call:room:state` to every chat participant so other tabs flip
+   * their CTA from "Start" to "Join". Idempotent — calling twice from
+   * the same chat returns the same room.
+   */
+  ensureCallRoom(payload: {
+    chatId: string
+    callType?: 'chat' | 'appointment'
+    mediaType?: 'audio' | 'video'
+  }) {
+    if (this.socket?.connected) {
+      this.socket.emit('call:room:ensure', payload)
+    }
+  }
+
+  /**
+   * Tell the server we've actually joined the Daily iframe. Fired from
+   * the Daily player's `joined-meeting` event. The server uses this to
+   * track participant count so it can tear the room down when the last
+   * person leaves.
+   */
+  notifyRoomJoined(callId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('call:room:joined', { callId })
+    }
+  }
+
+  /**
+   * Counterpart to `notifyRoomJoined` — fired when our Daily iframe
+   * is torn down. The server decrements the participant count and, if
+   * it hits zero, deletes the Daily room + Redis record and writes a
+   * CallHistory row.
+   */
+  notifyRoomLeft(callId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('call:room:left', { callId })
+    }
+  }
+
+  /**
+   * Read-only ping the FE fires when a chat is opened so the CTA
+   * label can be correct before any state-change event arrives.
+   * Server replies with a `call:room:state` for this chatId only to
+   * the requesting socket.
+   */
+  pollRoomStatus(chatId: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('call:room:status', { chatId })
+    }
+  }
+
+  onCallRoomReady(handler: (e: CallRoomReadyEvent) => void) {
+    this.callRoomReadyHandlers.push(handler)
+    return () => {
+      this.callRoomReadyHandlers = this.callRoomReadyHandlers.filter((h) => h !== handler)
+    }
+  }
+
+  onCallRoomState(handler: (e: CallRoomStateEvent) => void) {
+    this.callRoomStateHandlers.push(handler)
+    return () => {
+      this.callRoomStateHandlers = this.callRoomStateHandlers.filter((h) => h !== handler)
     }
   }
 

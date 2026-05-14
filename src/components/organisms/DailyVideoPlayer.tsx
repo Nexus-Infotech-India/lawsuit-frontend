@@ -64,6 +64,21 @@ const DailyVideoPlayer: FC<DailyVideoPlayerProps> = ({
     let cancelled = false
     setIsJoining(true)
 
+    // daily-js enforces a singleton per page — only one DailyIframe call
+    // object can exist at a time. React's StrictMode double-invokes effects
+    // in development, so the cleanup from the first run may not have
+    // finished destroying its instance before this second run tries to
+    // create a new one. Sweep up any survivor before calling createFrame
+    // so we never trip the "Duplicate DailyIframe instances" guard.
+    const existing = (DailyIframe as any).getCallInstance?.()
+    if (existing) {
+      try {
+        existing.destroy()
+      } catch {
+        /* ignore — best-effort cleanup */
+      }
+    }
+
     const call = DailyIframe.createFrame(containerRef.current, {
       iframeStyle: {
         width: '100%',
@@ -113,14 +128,24 @@ const DailyVideoPlayer: FC<DailyVideoPlayerProps> = ({
       const c = callRef.current
       callRef.current = null
       if (c) {
-        // Leave + destroy on unmount. Both are async — fire and forget.
-        c.leave().catch(() => {}).finally(() => {
-          try {
-            c.destroy()
-          } catch {
-            /* ignore */
-          }
-        })
+        // Must destroy synchronously so the next effect run (e.g. StrictMode
+        // double-mount, or a roomUrl change) doesn't collide with the
+        // outgoing instance. The old code waited for `leave()` to resolve
+        // inside `.finally()` and the second mount fired its createFrame
+        // before destroy ran — that's the "Duplicate DailyIframe" crash.
+        // `destroy()` handles the leave internally, so calling it directly
+        // is safe; we still fire leave() first so server-side participant
+        // state updates promptly, but don't await it.
+        try {
+          c.leave()
+        } catch {
+          /* ignore */
+        }
+        try {
+          c.destroy()
+        } catch {
+          /* ignore */
+        }
       }
     }
     // roomUrl+token together uniquely identify a room session — re-create if either changes

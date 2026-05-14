@@ -87,10 +87,34 @@ const AdminTeamPage: FC = () => {
       }
       if (editing.id) {
         await adminApi.updateAdmin(editing.id, payload)
+        showToast('Updated', 'success')
       } else {
-        await adminApi.createAdmin({ ...payload, password: editing.password || 'TempPass!123' })
+        // The server auto-generates a temporary password and emails it to
+        // the invitee (`admin-management.service.ts` → `sendAdminInviteEmail`).
+        // We only forward a password if the inviter explicitly typed one;
+        // otherwise let the server take the generate-and-email branch so
+        // the team member's inbox gets the real credentials. The previous
+        // hard-coded `'TempPass!123'` defeated the email flow and shipped
+        // a predictable shared password.
+        const createPayload: any = { ...payload }
+        if (editing.password) createPayload.password = editing.password
+        const res = await adminApi.createAdmin(createPayload)
+        const credentialsEmail = (res as any)?.data?.credentialsEmail
+        if (credentialsEmail?.delivered) {
+          showToast(`Invited — credentials emailed to ${editing.email}`, 'success')
+        } else if (credentialsEmail && !credentialsEmail.delivered) {
+          // The org-onboarding flow shows the temp password as a fallback
+          // when delivery fails; same pattern would apply here, but the
+          // server-side admin invite doesn't return the temp password
+          // yet, so for now just surface the failure reason.
+          showToast(
+            `Invited, but the credentials email did not send (${credentialsEmail.error || credentialsEmail.provider}). Use Forgot Password on the login page or resend.`,
+            'error',
+          )
+        } else {
+          showToast('Invited', 'success')
+        }
       }
-      showToast(editing.id ? 'Updated' : 'Invited', 'success')
       setShowForm(false)
       setEditing(null)
       await load()
@@ -250,14 +274,21 @@ const AdminTeamPage: FC = () => {
               </div>
               {!editing.id && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Initial password</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Initial password
+                    <span className="ml-1 text-xs font-normal text-gray-400">(optional)</span>
+                  </label>
                   <input
                     type="text"
                     value={editing.password || ''}
                     onChange={(e) => setEditing({ ...editing, password: e.target.value })}
-                    placeholder="Auto-set if blank — must be reset on first login"
+                    placeholder="Leave blank to email a generated temporary password"
                     className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-200"
                   />
+                  <p className="text-xs text-gray-500 mt-1">
+                    If blank, the server generates a one-time password and emails it to {editing.email || 'the invitee'}.
+                    They'll be forced to change it on first login.
+                  </p>
                 </div>
               )}
               <div>

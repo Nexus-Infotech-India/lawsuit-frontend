@@ -17,7 +17,20 @@ const typeConfig: Record<TransactionType, { label: string; color: string; icon: 
   TRANSFER: { label: 'Transfer', color: 'text-indigo-600 bg-indigo-50', icon: Send, sign: '-' },
 }
 
-type TabFilter = 'all' | 'credits' | 'debits'
+type TabFilter = 'all' | 'credits' | 'debits' | 'withdrawals' | 'transfers'
+
+/**
+ * TRANSFER is a stored value that can flow either direction in the wallet
+ * ledger — sometimes the user is the sender (debit), sometimes the
+ * receiver (credit). The server tags this on the description string with
+ * either "Received from <name>" / "Refund from <name>" / "Sent to <name>".
+ * Mirror the mobile `isCreditTransaction` heuristic so the same row
+ * lands in the correct credit / debit bucket consistently across web + mobile.
+ */
+const isInboundTransfer = (description: string): boolean => {
+  const d = (description || '').toLowerCase()
+  return /\b(received|refund|credit|incoming|reversed)\b/.test(d)
+}
 
 const WalletPage: FC = () => {
   const { balance, transactions, totalTransactions, currentPage, loading, error, fetchBalance, fetchTransactions, addMoney, confirmAddMoney, transfer } = useWalletStore()
@@ -46,12 +59,23 @@ const WalletPage: FC = () => {
     setTimeout(() => setToast(null), 3000)
   }
 
-  // Filter transactions by tab
-  const creditTypes: TransactionType[] = ['CREDIT', 'REFUND']
-  const debitTypes: TransactionType[] = ['DEBIT', 'WITHDRAWAL', 'PAYMENT', 'TRANSFER']
+  // Filter transactions by tab.
+  // Note: WITHDRAWAL and TRANSFER are handled separately so the credits /
+  // debits tabs don't double-count outgoing transfers (which a user often
+  // thinks of as a separate column) and so withdrawals get their own tab
+  // — matching the mobile app's UX.
   const filteredTransactions = transactions.filter((t) => {
-    if (activeTab === 'credits') return creditTypes.includes(t.type)
-    if (activeTab === 'debits') return debitTypes.includes(t.type)
+    const inboundTransfer = t.type === 'TRANSFER' && isInboundTransfer(t.description)
+    if (activeTab === 'credits') {
+      return t.type === 'CREDIT' || t.type === 'REFUND' || inboundTransfer
+    }
+    if (activeTab === 'debits') {
+      // Plain debits + outgoing payments + outgoing transfers. Withdrawals
+      // intentionally NOT in this bucket — they have their own tab.
+      return t.type === 'DEBIT' || t.type === 'PAYMENT' || (t.type === 'TRANSFER' && !inboundTransfer)
+    }
+    if (activeTab === 'withdrawals') return t.type === 'WITHDRAWAL'
+    if (activeTab === 'transfers') return t.type === 'TRANSFER'
     return true
   })
 
@@ -198,11 +222,13 @@ const WalletPage: FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Transaction History</h2>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 mb-6 w-fit flex-wrap">
           {([
             { id: 'all' as TabFilter, label: 'All' },
             { id: 'credits' as TabFilter, label: 'Credits', icon: TrendingUp },
             { id: 'debits' as TabFilter, label: 'Debits', icon: TrendingDown },
+            { id: 'withdrawals' as TabFilter, label: 'Withdrawals', icon: ArrowUpRight },
+            { id: 'transfers' as TabFilter, label: 'Transfers', icon: Send },
           ]).map((tab) => (
             <button
               key={tab.id}
@@ -242,7 +268,14 @@ const WalletPage: FC = () => {
           ) : (
             <div className="divide-y divide-gray-50">
               {filteredTransactions.map((tx) => {
-                const config = typeConfig[tx.type] || typeConfig.DEBIT
+                const baseConfig = typeConfig[tx.type] || typeConfig.DEBIT
+                // Flip TRANSFER to credit visuals when the description
+                // indicates inbound — mobile parity for "Received from …"
+                // rows that the default typeConfig treats as debits.
+                const isInbound = tx.type === 'TRANSFER' && isInboundTransfer(tx.description)
+                const config = isInbound
+                  ? { ...typeConfig.CREDIT, label: 'Transfer in' }
+                  : baseConfig
                 const Icon = config.icon
                 const isCredit = config.sign === '+'
                 return (

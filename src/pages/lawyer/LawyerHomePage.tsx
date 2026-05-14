@@ -61,17 +61,30 @@ const LawyerHomePage: FC = () => {
           walletApi.getBalance(),
         ])
 
+        // The server has used various wrapper shapes across endpoints:
+        // - { items: [...] } — current case + appointment shape
+        // - { data: [...] } — older paths
+        // - bare [...] — some legacy or aggregated reads
+        // Pick whichever exists so the dashboard stats keep working even if
+        // the API layer evolves its envelope.
+        const pickArray = (raw: any): any[] => {
+          if (Array.isArray(raw)) return raw
+          if (Array.isArray(raw?.items)) return raw.items
+          if (Array.isArray(raw?.data)) return raw.data
+          if (Array.isArray(raw?.appointments)) return raw.appointments
+          if (Array.isArray(raw?.cases)) return raw.cases
+          if (Array.isArray(raw?.data?.items)) return raw.data.items
+          return []
+        }
         if (apptRes.status === 'fulfilled') {
-          const data = apptRes.value?.data
-          setAppointments(Array.isArray(data) ? data : data?.items ?? data?.appointments ?? [])
+          setAppointments(pickArray(apptRes.value?.data))
         }
         if (caseRes.status === 'fulfilled') {
-          const data = caseRes.value?.data
-          setCases(Array.isArray(data) ? data : data?.items ?? data?.cases ?? [])
+          setCases(pickArray(caseRes.value?.data))
         }
         if (walletRes.status === 'fulfilled') {
           const data = walletRes.value?.data
-          setWalletBal(data?.balance ?? data?.wallet?.balance ?? 0)
+          setWalletBal(data?.balance ?? data?.wallet?.balance ?? data?.data?.balance ?? 0)
         }
       } catch (e: any) {
         setError('Failed to load dashboard data.')
@@ -83,17 +96,36 @@ const LawyerHomePage: FC = () => {
   }, [])
 
   // ── derived stats ─────────────────────────────────────────────────────────
+  // Status comparisons are case-insensitive to defend against any unexpected
+  // casing drift between server enum updates and stale client data.
+  const statusEq = (raw: any, target: string) =>
+    String(raw || '').toUpperCase() === target.toUpperCase()
+  const statusIn = (raw: any, targets: string[]) =>
+    targets.some((t) => statusEq(raw, t))
+
   const todayAppointments = appointments.filter((a) => {
-    try { return isToday(parseISO(a.scheduledAt)) } catch { return false }
+    try {
+      return a?.scheduledAt && isToday(parseISO(String(a.scheduledAt)))
+    } catch {
+      return false
+    }
   })
+  const now = Date.now()
   const upcomingAppts = appointments
-    .filter((a) => ['CONFIRMED', 'PENDING'].includes(a.status))
+    // "Upcoming" on the lawyer dashboard = future + still pending/confirmed.
+    // Past appointments stuck at PENDING/CONFIRMED would otherwise pollute
+    // this list — they belong in "missed" on the appointments tab.
+    .filter((a) => statusIn(a.status, ['CONFIRMED', 'PENDING']) && new Date(a.scheduledAt).getTime() > now)
     .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime())
     .slice(0, 4)
 
-  const activeCases = cases.filter((c) => ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW', 'HEARING_SCHEDULED', 'PENDING_DOCUMENTS'].includes(c.status))
-  const recentCases = [...cases].sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime()).slice(0, 4)
-  const completedAppts = appointments.filter((a) => a.status === 'COMPLETED').length
+  const activeCases = cases.filter((c) =>
+    statusIn(c.status, ['OPEN', 'IN_PROGRESS', 'UNDER_REVIEW', 'HEARING_SCHEDULED', 'PENDING_DOCUMENTS']),
+  )
+  const recentCases = [...cases]
+    .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+    .slice(0, 4)
+  const completedAppts = appointments.filter((a) => statusEq(a.status, 'COMPLETED')).length
   const avgRating = (user as any)?.rating ?? 0
 
   // ── greeting ──────────────────────────────────────────────────────────────

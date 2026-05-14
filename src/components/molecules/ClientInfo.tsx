@@ -347,10 +347,9 @@ const ClientInfo: React.FC = () => {
                   View Document
                 </a>
               ) : editing ? (
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf" 
-                  onChange={(e) => setIncomeFile(e.target.files?.[0] ?? null)} 
+                <input
+                  type="file"
+                  onChange={(e) => setIncomeFile(e.target.files?.[0] ?? null)}
                   className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 />
               ) : (
@@ -384,10 +383,9 @@ const ClientInfo: React.FC = () => {
                   View Document
                 </a>
               ) : editing ? (
-                <input 
-                  type="file" 
-                  accept="image/*,application/pdf" 
-                  onChange={(e) => setCasteFile(e.target.files?.[0] ?? null)} 
+                <input
+                  type="file"
+                  onChange={(e) => setCasteFile(e.target.files?.[0] ?? null)}
                   className="w-full px-4 py-2 border-2 border-dashed border-gray-300 rounded-lg text-sm file:mr-4 file:py-1 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
                 />
               ) : (

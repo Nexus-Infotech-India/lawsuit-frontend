@@ -11,6 +11,8 @@ import {
 } from 'lucide-react'
 import { useVideoCall } from '@/hooks/useVideoCall'
 import DailyVideoPlayer from '@/components/organisms/DailyVideoPlayer'
+import socketService from '@/services/socketService'
+import { useVideoCallStore } from '@/stores/videoCallStore'
 
 interface VideoRoomProps {
   onClose?: () => void
@@ -50,6 +52,7 @@ const VideoRoom: FC<VideoRoomProps> = ({ onClose }) => {
 
   const [callDuration, setCallDuration] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const callId = useVideoCallStore((s) => s.callId)
 
   // The other party on the call — whichever one isn't us
   const otherParticipant = caller || callee
@@ -63,7 +66,25 @@ const VideoRoom: FC<VideoRoomProps> = ({ onClose }) => {
     return () => clearInterval(interval)
   }, [status, getCallDuration])
 
+  // Tell the server when this client actually enters / leaves the
+  // Daily iframe. The server uses these signals to track participant
+  // count for the room-state broadcast and to tear down the Daily
+  // room when the last person leaves.
+  const handleIframeJoined = () => {
+    markConnected()
+    if (callId) socketService.notifyRoomJoined(callId)
+  }
+
+  const handleIframeLeft = () => {
+    // Note: `endCall('completed')` is preserved for the legacy ring
+    // flow (so call history lands as COMPLETED). The shared-room
+    // server tear-down happens on `call:room:left`.
+    if (callId) socketService.notifyRoomLeft(callId)
+    endCall('completed')
+  }
+
   const handleEndCall = () => {
+    if (callId) socketService.notifyRoomLeft(callId)
     endCall('completed')
     onClose?.()
   }
@@ -122,8 +143,8 @@ const VideoRoom: FC<VideoRoomProps> = ({ onClose }) => {
           token={token}
           isMuted={isMuted}
           isCameraOff={isCameraOff}
-          onJoined={markConnected}
-          onLeft={() => endCall('completed')}
+          onJoined={handleIframeJoined}
+          onLeft={handleIframeLeft}
           onError={(msg) => setError(msg)}
           className="w-full h-full"
         />

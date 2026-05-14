@@ -1,8 +1,20 @@
 import { FC, useEffect, useState } from 'react'
 import { format } from 'date-fns'
+import { ChevronDown, ChevronUp, FileText, Image as ImageIcon, ExternalLink, Sparkles, Loader2 } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import Button from '@/components/atoms/Button'
 import { useOrganizationStore } from '@/stores/organizationStore'
+import { organizationsApi } from '@/services/api'
 import type { OrgAppointmentRequest, OrgAppointmentRequestStatus, VerifiedLawyer } from '@/types'
+
+interface RequestDoc {
+  id: string
+  filename?: string | null
+  mimeType?: string | null
+  url: string
+  size?: number | null
+  extractionStatus?: 'NOT_STARTED' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | null
+}
 
 const STATUS_TABS: OrgAppointmentRequestStatus[] = ['PENDING', 'ASSIGNED', 'REJECTED', 'CANCELLED', 'EXPIRED']
 
@@ -18,6 +30,30 @@ const OrganizationRequestsPage: FC = () => {
   const [activeStatus, setActiveStatus] = useState<OrgAppointmentRequestStatus>('PENDING')
   const [assignTarget, setAssignTarget] = useState<OrgAppointmentRequest | null>(null)
   const [rejectTarget, setRejectTarget] = useState<OrgAppointmentRequest | null>(null)
+  // Row expansion state — opening a row reveals the full notes text and
+  // the supporting documents the client attached at booking time.
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [docsByReq, setDocsByReq] = useState<Record<string, RequestDoc[]>>({})
+  const [loadingDocsFor, setLoadingDocsFor] = useState<string | null>(null)
+  const navigate = useNavigate()
+
+  const toggleRow = async (requestId: string) => {
+    const willOpen = !expanded[requestId]
+    setExpanded((prev) => ({ ...prev, [requestId]: willOpen }))
+    if (willOpen && !docsByReq[requestId]) {
+      setLoadingDocsFor(requestId)
+      try {
+        const res = await organizationsApi.listOrgRequestDocuments(requestId)
+        const data = (res as any).data ?? res
+        const items: RequestDoc[] = data.items ?? data ?? []
+        setDocsByReq((prev) => ({ ...prev, [requestId]: Array.isArray(items) ? items : [] }))
+      } catch {
+        setDocsByReq((prev) => ({ ...prev, [requestId]: [] }))
+      } finally {
+        setLoadingDocsFor(null)
+      }
+    }
+  }
 
   useEffect(() => {
     fetchRequests({ status: activeStatus }).catch(() => { })
@@ -63,37 +99,125 @@ const OrganizationRequestsPage: FC = () => {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {requests.map((r) => (
-                <tr key={r.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{r.client.name}</div>
-                    <div className="text-xs text-gray-500">{r.client.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
-                    {format(new Date(r.scheduledAt), 'PP p')}
-                    <div className="text-xs text-gray-500">{r.durationMins} mins</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{r.meetingType || '—'}</td>
-                  <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">{r.notes || '—'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    {r.status === 'PENDING' ? (
-                      <div className="flex justify-end gap-2">
-                        <Button size="sm" onClick={() => setAssignTarget(r)}>Assign</Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="text-red-600 hover:bg-red-50"
-                          onClick={() => setRejectTarget(r)}
+              {requests.map((r) => {
+                const isOpen = !!expanded[r.id]
+                const docs = docsByReq[r.id] ?? []
+                return (
+                  <>
+                    <tr key={r.id}>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <button
+                          onClick={() => toggleRow(r.id)}
+                          className="flex items-center gap-2 group"
+                          aria-label={isOpen ? 'Collapse' : 'Expand'}
                         >
-                          Reject
-                        </Button>
-                      </div>
-                    ) : (
-                      <span className="text-xs text-gray-500">{r.status}</span>
+                          {isOpen ? (
+                            <ChevronUp className="w-4 h-4 text-gray-400 group-hover:text-gray-700" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-400 group-hover:text-gray-700" />
+                          )}
+                          <div className="text-left">
+                            <div className="text-sm font-medium text-gray-900">{r.client.name}</div>
+                            <div className="text-xs text-gray-500">{r.client.email}</div>
+                          </div>
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">
+                        {format(new Date(r.scheduledAt), 'PP p')}
+                        <div className="text-xs text-gray-500">{r.durationMins} mins</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{r.meetingType || '—'}</td>
+                      <td className="px-6 py-4 text-sm text-gray-700 max-w-xs truncate">
+                        {r.notes || '—'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                        {r.status === 'PENDING' ? (
+                          <div className="flex justify-end gap-2">
+                            <Button size="sm" onClick={() => setAssignTarget(r)}>Assign</Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-red-600 hover:bg-red-50"
+                              onClick={() => setRejectTarget(r)}
+                            >
+                              Reject
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-gray-500">{r.status}</span>
+                        )}
+                      </td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="bg-gray-50/60">
+                        <td colSpan={5} className="px-6 py-4">
+                          <div className="space-y-3">
+                            {r.notes && (
+                              <div className="rounded-md border border-indigo-100 bg-indigo-50/50 p-3">
+                                <div className="text-[11px] font-semibold text-indigo-700 uppercase tracking-wide mb-1">
+                                  Issue described by client
+                                </div>
+                                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">{r.notes}</p>
+                              </div>
+                            )}
+                            <div>
+                              <div className="text-[11px] font-semibold text-gray-700 uppercase tracking-wide mb-1.5">
+                                Supporting documents
+                              </div>
+                              {loadingDocsFor === r.id ? (
+                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  Loading…
+                                </div>
+                              ) : docs.length === 0 ? (
+                                <p className="text-xs text-gray-500 italic">
+                                  The client didn't attach any documents.
+                                </p>
+                              ) : (
+                                <ul className="space-y-1.5">
+                                  {docs.map((d) => {
+                                    const isImg = (d.mimeType || '').startsWith('image/')
+                                    return (
+                                      <li
+                                        key={d.id}
+                                        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-white border border-gray-200 text-xs"
+                                      >
+                                        {isImg ? (
+                                          <ImageIcon className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                        ) : (
+                                          <FileText className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+                                        )}
+                                        <span className="flex-1 text-gray-800 truncate">{d.filename || 'Document'}</span>
+                                        <button
+                                          onClick={() => navigate(`/organization/document-ai?documentId=${d.id}`)}
+                                          className="inline-flex items-center gap-1 text-[11px] font-medium text-fuchsia-700 hover:text-fuchsia-800"
+                                          title="Open in Document AI (extract / summarize / Q&A)"
+                                        >
+                                          <Sparkles className="w-3 h-3" /> AI
+                                        </button>
+                                        <a
+                                          href={d.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1 text-[11px] font-medium text-gray-600 hover:text-gray-900"
+                                          title="Open the original file"
+                                        >
+                                          <ExternalLink className="w-3 h-3" />
+                                          Open
+                                        </a>
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                </tr>
-              ))}
+                  </>
+                )
+              })}
             </tbody>
           </table>
         )}

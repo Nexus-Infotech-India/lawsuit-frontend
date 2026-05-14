@@ -152,8 +152,15 @@ const ViewCasePagesLawyer: FC = () => {
         navigate(`/lawyer/case/${caseId}`)
     }
 
-    const handleDiscuss = (caseId: string) => {
-        navigate(`/lawyer/chat?caseId=${caseId}`)
+    // Open the unified WhatsApp-style chat page pre-opened on the client for
+    // this case. Falls back to the chat list if there's no client (shouldn't
+    // happen — a case must have a client — but guards against partial data).
+    const handleDiscuss = (caseItem: getAllCasesResponse['data'][0]) => {
+        if (caseItem.client?.id) {
+            navigate(`/lawyer/chats?with=${caseItem.client.id}&caseId=${caseItem.id}`)
+        } else {
+            navigate('/lawyer/chats')
+        }
     }
 
     const renderCaseCard = (caseItem: getAllCasesResponse['data'][0]) => {
@@ -287,7 +294,7 @@ const ViewCasePagesLawyer: FC = () => {
                         View Details
                     </button>
                     <button
-                        onClick={() => handleDiscuss(caseItem.id)}
+                        onClick={() => handleDiscuss(caseItem)}
                         className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-white transition-colors"
                     >
                         <MessageSquare className="w-4 h-4" />

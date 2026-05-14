@@ -17,8 +17,10 @@ interface AxiosLikeError {
   response?: {
     status?: number
     data?: any
+    config?: { url?: string }
   }
   request?: any
+  config?: { url?: string }
   message?: string
   code?: string
 }
@@ -46,7 +48,7 @@ const STATUS_DEFAULTS: Record<number, string> = {
  * (e.g. lowercase verbs, raw Prisma errors, JWT jargon). Anything not matched
  * is returned as-is — server messages are usually already user-friendly.
  */
-function humanizeServerMessage(raw: string): string {
+function humanizeServerMessage(raw: string, url: string = ''): string {
   const trimmed = raw.trim()
   if (!trimmed) return ''
 
@@ -65,9 +67,11 @@ function humanizeServerMessage(raw: string): string {
 
   // Sandbox-specific rewrites — turn provider-side wording ("Invalid OTP",
   // "Reference id has expired", "Aadhaar not linked to mobile") into copy
-  // that tells the user what to *do* next. No-op when the message doesn't
-  // match a known pattern.
-  const sandboxRewrite = rewriteSandboxError(trimmed)
+  // that tells the user what to *do* next. We forward the request URL so
+  // the URL gate inside rewriteSandboxError() can skip broad patterns
+  // ("unauthorized", "rate limit", etc.) for non-eKYC endpoints. The
+  // Aadhaar-specific patterns self-scope via their regex and still fire.
+  const sandboxRewrite = rewriteSandboxError(trimmed, { url })
   if (sandboxRewrite !== trimmed) return sandboxRewrite
 
   // Sentence-case the first letter so server's lowercase verbs (`"failed to ..."`) read as polished UI copy.
@@ -90,6 +94,10 @@ export function friendlyError(err: unknown, fallback?: string): string {
   // Axios errors expose .response on HTTP responses
   const status = e?.response?.status
   const data = e?.response?.data
+  // Where the failing request was aimed. Used to gate URL-scoped rewrites
+  // (e.g. the eKYC sandbox-down message should only fire for /ekyc/*
+  // endpoints, not for every 401/403 in the app).
+  const url = String(e?.config?.url || e?.response?.config?.url || '')
 
   // Try server-provided messages in order of specificity
   let candidate: string | undefined
@@ -102,7 +110,7 @@ export function friendlyError(err: unknown, fallback?: string): string {
     else if (Array.isArray(data.issues) && data.issues[0]?.message) candidate = String(data.issues[0].message)
   }
 
-  if (candidate) return humanizeServerMessage(candidate)
+  if (candidate) return humanizeServerMessage(candidate, url)
 
   // No server message — use status-aware default
   if (status && STATUS_DEFAULTS[status]) return STATUS_DEFAULTS[status]
@@ -112,7 +120,7 @@ export function friendlyError(err: unknown, fallback?: string): string {
     return "We can't reach our servers right now. Check your connection and try again."
   }
 
-  if (typeof e?.message === 'string' && e.message) return humanizeServerMessage(e.message)
+  if (typeof e?.message === 'string' && e.message) return humanizeServerMessage(e.message, url)
 
   return fallback || 'Something went wrong. Please try again.'
 }

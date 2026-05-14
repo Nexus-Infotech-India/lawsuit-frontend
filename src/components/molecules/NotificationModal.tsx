@@ -36,33 +36,107 @@ const NotificationModal: FC<{ open: boolean; onClose: () => void }> = ({ open, o
     }
   }, [fetchNextPage])
 
-  // Navigate based on notification type/data
-  const handleNotificationClick = async (n: Notification) => {
-    const { data, type } = n
+  // Resolve which path prefix to send the user to based on their role.
+  // Without this, a LAWYER clicking a case notification got bounced to /app/...
+  // (a client URL) which silently 404'd inside the lawyer layout — that was
+  // the user-reported "notification doesn't redirect" bug.
+  //
+  // Court admins use a separate auth store (`useCourtAdminStore`), but that
+  // store writes the user record into the same shared `storage.getUserData()`
+  // slot that `useAuthStore` reads from, so reading the role from authStore
+  // here works for them too. The COURT_ADMIN branch was missing — without it
+  // court admins were silently routed to /app/... (client paths) that don't
+  // exist in their layout.
+  const role = useAuthStore((s) => s.user?.role) ?? 'CLIENT'
+  const rolePrefix =
+    role === 'LAWYER' ? '/lawyer'
+      : role === 'ORGANIZATION' ? '/organization'
+        : role === 'ADMIN' ? '/admin'
+          : role === 'COURT_ADMIN' ? '/court-admin'
+            : '/app'
 
-    // ── Organization (law-firm) flow ────────────────────────────────
-    if (type === 'ORGANIZATION_VERIFIED') {
-      navigate('/organization/dashboard')
-      onClose()
-      return
+  // Map a notification onto a concrete route. Returns null when no specific
+  // destination makes sense so the caller can keep the panel open.
+  const resolveRoute = (n: Notification): string | null => {
+    const { data = {}, type } = n
+    const t = String(type || '').toUpperCase()
+    const anyData = data as any
+
+    // Court-admin-specific routing — these notifications only fire for
+    // COURT_ADMIN users, so we send them straight to the verification queue
+    // regardless of the global rolePrefix logic below. Without this branch
+    // a court admin tapping "new lawyer verification request" was bounced to
+    // /app/cases which doesn't exist in their layout.
+    if (role === 'COURT_ADMIN') {
+      if (anyData?.lawyerId && (t === 'CASE_UPDATE' || t.includes('VERIFICATION') || t.includes('LAWYER'))) {
+        return `/court-admin/verify/${anyData.lawyerId}`
+      }
+      if (anyData?.organizationId && (t === 'CASE_UPDATE' || t.includes('VERIFICATION') || t.includes('ORG'))) {
+        return '/court-admin/organization-verifications'
+      }
+      if (t.includes('SALARY')) return '/court-admin/salary'
     }
-    if (type === 'ORGANIZATION_REJECTED') {
-      navigate('/organization/verification')
-      onClose()
-      return
+
+    // Organisation flows live at fixed paths regardless of caller role.
+    if (t === 'ORGANIZATION_VERIFIED') return '/organization/dashboard'
+    if (t === 'ORGANIZATION_REJECTED') return '/organization/verification'
+    if (t === 'ORG_APPOINTMENT_REQUEST_RECEIVED') return '/organization/requests'
+    if (t === 'ORG_APPOINTMENT_REQUEST_REJECTED') return '/app/firms-requests'
+
+    // Chat ID present → open that conversation.
+    if (data.chatId) return `${rolePrefix}/chats?chatId=${data.chatId}`
+
+    // Appointment-related types → route to the right appointment detail.
+    if (
+      data.appointmentId ||
+      t === 'APPOINTMENT_BOOKED' ||
+      t === 'APPOINTMENT_CONFIRMED' ||
+      t === 'APPOINTMENT_REMINDER' ||
+      t === 'APPOINTMENT_RESCHEDULED' ||
+      t === 'APPOINTMENT_CANCELLED'
+    ) {
+      return data.appointmentId
+        ? `${rolePrefix}/appointments?id=${data.appointmentId}`
+        : `${rolePrefix}/appointments`
     }
-    if (type === 'ORG_APPOINTMENT_REQUEST_RECEIVED') {
-      navigate('/organization/requests')
-      onClose()
-      return
+
+    // Video call ring-in → consultation room.
+    if (t === 'INCOMING_CALL' && data.appointmentId) {
+      return `${rolePrefix}/consultation/${data.appointmentId}`
     }
-    if (type === 'ORG_APPOINTMENT_REQUEST_REJECTED') {
-      navigate('/app/firms-requests')
-      onClose()
-      return
+
+    // Case / task / hearing / document → case detail page (singular `case`).
+    if (
+      data.caseId ||
+      t === 'TASK_ASSIGNED' ||
+      t === 'TASK_UPDATED' ||
+      t === 'CASE_CLOSED' ||
+      t === 'HEARING_SCHEDULED' ||
+      t === 'DOCUMENT_UPLOADED' ||
+      t === 'TIMELINE_EVENT_ADDED'
+    ) {
+      return data.caseId ? `${rolePrefix}/case/${data.caseId}` : `${rolePrefix}/cases`
     }
-    if (type === 'ORG_APPOINTMENT_REQUEST_ASSIGNED') {
-      // Fetch the request, find the matching one (by id) so we can open Razorpay.
+
+    // Mediation events → mediation detail. (`mediationId` is loose-typed in
+    // the payload — already cast through `anyData` at the top of this fn.)
+    if (anyData?.mediationId) return `${rolePrefix}/mediation/${anyData.mediationId}`
+
+    // Payment / wallet credits → wallet page.
+    if (t === 'WALLET_CREDIT' || t === 'PAYMENT_RECEIVED') return `${rolePrefix}/wallet`
+
+    // Review received → public profile.
+    if (t === 'REVIEW_RECEIVED' && rolePrefix === '/lawyer') return '/lawyer/profile'
+
+    return null
+  }
+
+  const handleNotificationClick = async (n: Notification) => {
+    const { data = {}, type } = n
+    const t = String(type || '').toUpperCase()
+
+    // Special-case: org assignment opens Razorpay inline rather than navigating.
+    if (t === 'ORG_APPOINTMENT_REQUEST_ASSIGNED') {
       try {
         await useOrganizationStore.getState().fetchMyRequests()
         const requestId = data.requestId
@@ -81,7 +155,6 @@ const NotificationModal: FC<{ open: boolean; onClose: () => void }> = ({ open, o
             },
           })
         } else {
-          // Fall back to navigation if we can't find the request
           navigate('/app/firms-requests')
         }
       } catch {
@@ -91,14 +164,9 @@ const NotificationModal: FC<{ open: boolean; onClose: () => void }> = ({ open, o
       return
     }
 
-    // ── Existing flows ──────────────────────────────────────────────
-    if (type === 'NEW_MESSAGE' && data.chatId) {
-      navigate(`/app/chat/${data.chatId}`)
-    } else if (data.appointmentId) {
-      navigate(`/app/appointments`)
-    } else if (data.caseId) {
-      navigate(`/app/cases/${data.caseId}`)
-    }
+    // Generic routing for all other types.
+    const target = resolveRoute(n)
+    if (target) navigate(target)
     onClose()
   }
 

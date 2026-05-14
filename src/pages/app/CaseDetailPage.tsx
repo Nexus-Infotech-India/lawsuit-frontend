@@ -1,9 +1,8 @@
 import { FC, useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import CaseInfo from '@/components/atoms/CaseInfo'
 import CaseTimeline from '@/components/atoms/CaseTimeline'
 import CaseHearings from '@/components/atoms/CaseHearings'
-import ChatTab from '@/components/atoms/ChatTab'
 import DocumentsTab from '@/components/atoms/DocumentsTab'
 import TasksTab from '@/components/atoms/TasksTab'
 import { casesApi } from '@/services/api'
@@ -12,7 +11,10 @@ type TabKey = 'caseInfo' | 'timeline' | 'hearings' | 'chat' | 'documents' | 'tas
 
 const CaseDetailPage: FC = () => {
   const { caseId } = useParams<{ caseId: string }>()
-  const [selectedTab, setSelectedTab] = useState<TabKey>('chat')
+  const navigate = useNavigate()
+  // Default to caseInfo now that chat redirects elsewhere — landing on the
+  // chat tab would just bounce the user immediately.
+  const [selectedTab, setSelectedTab] = useState<TabKey>('caseInfo')
   const [caseData, setCaseData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -40,11 +42,15 @@ const CaseDetailPage: FC = () => {
       case 'caseInfo':
         return <CaseInfo caseId={id} />
       case 'timeline':
-        return <CaseTimeline caseId={id} initialEvents={caseData?.timeline ?? []} />
+        // Server-backed now — `caseData?.timeline` is read directly from the
+        // server via React Query inside CaseTimeline; the prop is unused.
+        return <CaseTimeline caseId={id} />
       case 'hearings':
-        return <CaseHearings caseId={id} hearings={caseData?.hearings ?? []} />
+        return <CaseHearings caseId={id} />
+      // 'chat' is handled by an onClick redirect in the tab list below; this
+      // case is unreachable in practice but kept for type exhaustiveness.
       case 'chat':
-        return <ChatTab caseId={id} />
+        return null
       case 'documents':
         return <DocumentsTab caseId={id} />
       case 'tasks':
@@ -96,7 +102,20 @@ const CaseDetailPage: FC = () => {
                 ).map((t) => (
                   <button
                     key={t.key}
-                    onClick={() => setSelectedTab(t.key)}
+                    onClick={() => {
+                      // Chat tab redirects to the unified chat page with
+                      // this case's lawyer pre-opened.
+                      if (t.key === 'chat') {
+                        const lawyerId = caseData?.lawyer?.id ?? caseData?.lawyerId
+                        if (lawyerId && caseId) {
+                          navigate(`/app/chats?with=${lawyerId}&caseId=${caseId}`)
+                        } else {
+                          navigate('/app/chats')
+                        }
+                        return
+                      }
+                      setSelectedTab(t.key)
+                    }}
                     className={`w-full text-left px-3 py-2 rounded-md ${selectedTab === t.key ? 'bg-white border shadow-sm' : 'hover:bg-gray-100'}`}
                   >
                     {t.label}

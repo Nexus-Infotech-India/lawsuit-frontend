@@ -117,6 +117,20 @@ export interface OrgAppointmentRequest {
     scheduledAt: string
     paymentId?: string | null
   } | null
+  /**
+   * Pre-paid booking payment. Populated for org-appointment requests created
+   * via the new pay-at-booking flow — the FE uses `providerOrderId` to
+   * re-open Razorpay checkout if the user closed it mid-flow without paying.
+   * `amount` is in rupees (the server normalises before returning).
+   */
+  payment?: {
+    id: string
+    providerOrderId: string | null
+    amount: number
+    currency: string
+    status: 'PENDING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | string
+    provider?: string | null
+  } | null
   createdAt: string
   updatedAt: string
 }

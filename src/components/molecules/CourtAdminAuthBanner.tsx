@@ -1,16 +1,39 @@
-import { FC, useEffect, useState } from 'react'
+import { FC, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, CheckCircle2, Clock, RefreshCw } from 'lucide-react'
 import { courtAdminExtApi } from '@/services/api'
 
-interface AuthStatus {
-  status: 'PENDING_SUPER_ADMIN_APPROVAL' | 'AUTHORIZED' | 'REJECTED' | 'SUSPENDED'
-  reason?: string | null
-  rejectedAt?: string | null
+/**
+ * Status pulled from `GET /court-admin/me/authorization`. The server
+ * returns `{ courtAdmin, history }` and the court admin row carries TWO
+ * independent status fields:
+ *
+ *   - `verificationStatus`: the super-admin gate
+ *     (PENDING_SUPER_ADMIN_APPROVAL | APPROVED | REJECTED)
+ *   - `status`: the operational state
+ *     (ACTIVE | INACTIVE | SUSPENDED)
+ *
+ * The previous implementation treated these as a single string and used
+ * a non-existent `AUTHORIZED` enum value, so unmatched statuses returned
+ * `undefined` from the config lookup → `cfg.color` crashed. We now read
+ * both fields, derive a single banner state, and bail safely when the
+ * shape is unexpected.
+ */
+type VerificationStatus = 'PENDING_SUPER_ADMIN_APPROVAL' | 'APPROVED' | 'REJECTED'
+type OperationalStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED'
+
+interface CourtAdminAuthRow {
+  id?: string
+  verificationStatus?: VerificationStatus | string
+  status?: OperationalStatus | string
+  isAuthorized?: boolean
+  rejectionReason?: string | null
   authorizedAt?: string | null
 }
 
+type BannerKind = 'PENDING' | 'REJECTED' | 'SUSPENDED' | 'INACTIVE'
+
 const CourtAdminAuthBanner: FC = () => {
-  const [status, setStatus] = useState<AuthStatus | null>(null)
+  const [row, setRow] = useState<CourtAdminAuthRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [reapplying, setReapplying] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
@@ -19,9 +42,17 @@ const CourtAdminAuthBanner: FC = () => {
     setLoading(true)
     try {
       const res = await courtAdminExtApi.getMyAuthorization()
-      setStatus((res.data?.data ?? res.data) as AuthStatus)
+      const data = (res as any).data ?? res
+      // The server returns `{ courtAdmin, history }`. Be defensive — old
+      // deploys may have returned the row directly; fall back to that
+      // shape so a stale build doesn't blank the banner.
+      const ca =
+        data?.courtAdmin ??
+        data?.data?.courtAdmin ??
+        (data && typeof data === 'object' && ('verificationStatus' in data || 'status' in data) ? data : null)
+      setRow((ca as CourtAdminAuthRow) || null)
     } catch {
-      setStatus(null)
+      setRow(null)
     } finally {
       setLoading(false)
     }
@@ -45,36 +76,56 @@ const CourtAdminAuthBanner: FC = () => {
     }
   }
 
-  if (loading || !status || status.status === 'AUTHORIZED') return null
+  // Derive a single banner kind from the two status fields. The
+  // operational status (SUSPENDED / INACTIVE) takes priority because
+  // it's more recent — a super-admin approval is meaningless if the
+  // account is currently suspended.
+  const kind: BannerKind | null = useMemo(() => {
+    if (!row) return null
+    const op = String(row.status || '').toUpperCase() as OperationalStatus | ''
+    const verif = String(row.verificationStatus || '').toUpperCase() as VerificationStatus | ''
+    if (op === 'SUSPENDED') return 'SUSPENDED'
+    if (op === 'INACTIVE') return 'INACTIVE'
+    if (verif === 'REJECTED') return 'REJECTED'
+    if (verif === 'PENDING_SUPER_ADMIN_APPROVAL') return 'PENDING'
+    // Anything else (APPROVED + ACTIVE, plus unknown values) → no banner.
+    return null
+  }, [row])
 
-  const config: Record<AuthStatus['status'], { color: string; icon: React.ReactNode; title: string; body: string }> = {
-    PENDING_SUPER_ADMIN_APPROVAL: {
+  if (loading || !kind) return null
+
+  const config: Record<BannerKind, { color: string; icon: React.ReactNode; title: string; body: string }> = {
+    PENDING: {
       color: 'bg-amber-50 border-amber-200 text-amber-900',
       icon: <Clock className="w-5 h-5 text-amber-600" />,
       title: 'Awaiting super admin approval',
       body: 'Your account is pending review. You can edit your profile, but verification actions unlock once approved.',
     },
-    AUTHORIZED: {
-      color: 'bg-green-50 border-green-200 text-green-900',
-      icon: <CheckCircle2 className="w-5 h-5 text-green-600" />,
-      title: 'Authorized',
-      body: '',
-    },
     REJECTED: {
       color: 'bg-red-50 border-red-200 text-red-900',
       icon: <AlertTriangle className="w-5 h-5 text-red-600" />,
       title: 'Application rejected',
-      body: status.reason || 'Your application was rejected. You may re-apply with updated details.',
+      body: row?.rejectionReason || 'Your application was rejected. You may re-apply with updated details.',
     },
     SUSPENDED: {
       color: 'bg-red-50 border-red-200 text-red-900',
       icon: <AlertTriangle className="w-5 h-5 text-red-600" />,
       title: 'Account suspended',
-      body: status.reason || 'Your account is suspended. Contact platform support.',
+      body: row?.rejectionReason || 'Your account is suspended. Contact platform support.',
+    },
+    INACTIVE: {
+      color: 'bg-gray-50 border-gray-200 text-gray-900',
+      icon: <CheckCircle2 className="w-5 h-5 text-gray-500" />,
+      title: 'Account inactive',
+      body: 'Your account is inactive. Contact platform support if this is unexpected.',
     },
   }
 
-  const cfg = config[status.status]
+  // Should never be undefined now that BannerKind is locked to the four
+  // values in config, but keep the defensive bail so a future enum-add
+  // can't crash the page.
+  const cfg = config[kind]
+  if (!cfg) return null
 
   return (
     <div className={`border rounded-xl p-4 ${cfg.color} flex items-start gap-3`}>
@@ -84,7 +135,7 @@ const CourtAdminAuthBanner: FC = () => {
         <div className="text-sm mt-0.5 opacity-90">{cfg.body}</div>
         {msg && <div className="text-xs mt-2">{msg}</div>}
       </div>
-      {status.status === 'REJECTED' && (
+      {kind === 'REJECTED' && (
         <button
           onClick={handleReapply}
           disabled={reapplying}

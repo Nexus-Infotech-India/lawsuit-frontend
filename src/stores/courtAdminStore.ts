@@ -19,6 +19,21 @@ export interface VerificationRequest {
         phone: string;
         licenseNumber: string;
         barCouncilId: string;
+        // The server already returns these (selected in
+        // `getPendingLawyerVerifications` / `getLawyerVerifications`),
+        // but they used to be discarded by this TS shape — which is why
+        // the court admin's verify page rendered "No documents found"
+        // instead of the lawyer's actual KYC PDFs.
+        licenseProofUrl?: string | null;
+        barCouncilProofUrl?: string | null;
+        avatarUrl?: string | null;
+        bio?: string | null;
+        specializations?: string[] | null;
+        experienceYears?: number | null;
+        city?: string | null;
+        state?: string | null;
+        district?: string | null;
+        pincode?: string | null;
     };
 }
 

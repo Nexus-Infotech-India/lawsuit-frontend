@@ -59,7 +59,7 @@ interface OrganizationState {
   // Actions — client
   fetchMyRequests: (params?: { status?: OrgAppointmentRequestStatus; page?: number; limit?: number }) => Promise<void>
   cancelMyRequest: (id: string) => Promise<void>
-  createRequest: (organizationId: string, data: { scheduledAt: string; durationMins?: number; meetingType?: string; notes?: string }) => Promise<any>
+  createRequest: (organizationId: string, data: { scheduledAt: string; durationMins?: number; meetingType?: string; notes?: string; paymentMethod?: 'razorpay' | 'wallet' }) => Promise<any>
 
   // Actions — court admin
   fetchPendingOrgVerifications: () => Promise<void>
@@ -249,13 +249,22 @@ export const useOrganizationStore = create<OrganizationState>((set, get) => ({
   },
 
   fetchPublicOrgs: async (params) => {
+    // Previously this store hard-coded `verified: true` on every fetch, which
+    // matched the intent ("show only verified firms") but meant a dev DB with
+    // no verified orgs would always show an empty list. The mobile app's
+    // `OrgListScreen` only sends `verified` when the user explicitly taps the
+    // "Verified" chip — we mirror that so the page works by default and the
+    // caller can opt-in via params. The list page surfaces a "Verified only"
+    // toggle the user can flip.
     set({ loadingPublicOrgs: true })
     try {
-      const res = await organizationsApi.list({ verified: true, ...params })
-      set({
-        publicOrgs: res.data?.items || [],
-        publicOrgsTotal: res.data?.total || 0,
-      })
+      const res = await organizationsApi.list(params ?? {})
+      // Server returns `{ items, total, page, limit }` directly; some routes
+      // wrap in `{ data: ... }` — handle both defensively.
+      const payload = (res.data as any) ?? res
+      const items = payload.items ?? payload.data?.items ?? []
+      const total = payload.total ?? payload.data?.total ?? 0
+      set({ publicOrgs: items, publicOrgsTotal: total })
     } catch {
       set({ publicOrgs: [], publicOrgsTotal: 0 })
     } finally {

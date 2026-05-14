@@ -16,8 +16,6 @@ const AdminAnnouncementsPage: FC = () => {
     setTimeout(() => setToast(null), 3500)
   }
 
-  console.log("Aditya & Matru")
-
   const toggleRole = (r: string) => {
     setRoles((prev) => (prev.includes(r) ? prev.filter((x) => x !== r) : [...prev, r]))
   }

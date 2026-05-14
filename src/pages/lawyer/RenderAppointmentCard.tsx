@@ -1,7 +1,6 @@
 import { FC, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { Calendar, Clock, FileText, MessageSquare, User, Video, Upload, RefreshCw, XCircle, ChevronDown, ChevronUp, Check, X, CheckCircle2, Sparkles } from 'lucide-react'
-import AppointmentDiscussionPanel from '@/components/organisms/AppointmentDiscussionPanel'
+import { Link, useNavigate } from 'react-router-dom'
+import { Calendar, Clock, FileText, MessageSquare, User, Video, Upload, RefreshCw, XCircle, ChevronDown, ChevronUp, Check, X, CheckCircle2, Sparkles, Briefcase } from 'lucide-react'
 import AppointmentDocumentsPanel from '@/components/molecules/AppointmentDocumentsPanel'
 import EkycVerifiedBadge from '@/components/atoms/EkycVerifiedBadge'
 import { appointmentsExtApi } from '@/services/api'
@@ -43,7 +42,11 @@ interface AppointmentData {
   } | null;
 }
 
-type TabType = 'attendNow' | 'upcoming' | 'missed' | 'attended' | 'cancelled'
+// `pending` keeps a tab-specific value so the parent can pass it cleanly,
+// but no `tabType === 'pending'` per-tab buttons exist here — the Accept /
+// Reject buttons come from the PENDING-status lifecycle branch above so a
+// pending appointment surfaced on this card always shows the right actions.
+type TabType = 'pending' | 'attendNow' | 'upcoming' | 'missed' | 'attended' | 'cancelled'
 
 interface RenderAppointmentCardProps {
   appointment: AppointmentData;
@@ -105,8 +108,13 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
   onCancel,
   onChanged,
 }) => {
-  const [discussionOpen, setDiscussionOpen] = useState(false)
-  const [documentsOpen, setDocumentsOpen] = useState(false)
+  const navigate = useNavigate()
+  // Pending consultations are pre-decision: the lawyer should only see the
+  // client's described issue and the supporting documents (with the AI
+  // summary). Hiding chat, payment, status pill, and the collapsed-docs
+  // wrapper keeps the screen focused on what's needed to accept or reject.
+  const isPending = appointment.status === 'PENDING'
+  const [documentsOpen, setDocumentsOpen] = useState(isPending)
   const [busyAction, setBusyAction] = useState<null | 'accept' | 'reject' | 'complete'>(null)
   const [actionError, setActionError] = useState<string | null>(null)
   const otherParty = appointment.client
@@ -126,12 +134,20 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
   }
 
   const handleReject = async () => {
-    const reason = prompt('Reason for rejecting? (optional)') || undefined
-    if (reason === undefined && !confirm('Reject this consultation?')) return
+    // The server's reject path auto-refunds any completed payment back to
+    // the client's wallet (see `consultation.service.ts::rejectAppointment`
+    // → `payoutService.refundToClient`). Flag that in the prompt so the
+    // lawyer knows what they're signing off on.
+    const reason = prompt(
+      'Reject this consultation?\n\nIf the client has already paid, the full amount is refunded to their wallet automatically.\n\nOptional reason (shown to the client):',
+    )
+    // `prompt` returns null when the user cancels, '' when they submit
+    // blank. Cancel aborts; blank-submit proceeds without a reason.
+    if (reason === null) return
     setBusyAction('reject')
     setActionError(null)
     try {
-      await appointmentsExtApi.reject(appointment.id, reason)
+      await appointmentsExtApi.reject(appointment.id, reason || undefined)
       onChanged?.()
     } catch (err: any) {
       setActionError(err?.response?.data?.error || 'Failed to reject')
@@ -202,21 +218,40 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
               <Clock className="w-4 h-4" />
               <span>{formatTime(appointment.scheduledAt)} ({appointment.durationMins} mins)</span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-secondary">Status:</span>
-              <span className={`font-medium ${getStatusColor(appointment.status)}`}>
-                {appointment.status}
-              </span>
-            </div>
+            {/* Status pill is redundant for pending — the tab itself already
+                conveys "this is a pending request" and we want the screen
+                stripped down to the decision context. */}
+            {!isPending && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-secondary">Status:</span>
+                <span className={`font-medium ${getStatusColor(appointment.status)}`}>
+                  {appointment.status}
+                </span>
+              </div>
+            )}
           </div>
 
+          {/* Client's description of the issue. Surfaced in a labelled box
+              so it doesn't read like an admin note — the lawyer needs to see
+              the FULL message to triage / prepare. We keep `whitespace-pre-wrap`
+              to honour line breaks the client typed and drop the truncation
+              the old layout had. */}
           {appointment.notes && (
-            <p className="text-sm text-secondary mb-4 line-clamp-2">
-              {appointment.notes}
-            </p>
+            <div className="mb-4 rounded-md border border-indigo-100 bg-indigo-50/50 p-3">
+              <div className="text-xs font-semibold text-indigo-700 uppercase tracking-wide mb-1">
+                Issue described by client
+              </div>
+              <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
+                {appointment.notes}
+              </p>
+            </div>
           )}
 
-          {appointment.payment && (
+          {/* Payment status is hidden on the pending card — it's an
+              implementation detail (escrow is already held server-side)
+              and not something the lawyer needs to reason about before
+              accept/reject. Rejecting auto-refunds in either case. */}
+          {!isPending && appointment.payment && (
             <div className="text-sm text-secondary mb-4">
               Payment: {appointment.payment.currency} {appointment.payment.amount} -
               <span className={`ml-1 ${appointment.payment.status === 'COMPLETED' ? 'text-green-600' : 'text-yellow-600'}`}>
@@ -300,12 +335,16 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
               <MessageSquare className="w-4 h-4" />
               Discuss
             </button>
+            {/* Escalate-to-Case — explicitly named so it matches the
+                lawyer's mental model. Clicking opens the create-case sheet
+                seeded with this client + appointment metadata so the lawyer
+                can convert the consultation into a tracked case. */}
             <button
               onClick={() => onOpenCaseCreation(appointment)}
               className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-white transition-colors"
             >
-              <FileText className="w-4 h-4" />
-              Case Details
+              <Briefcase className="w-4 h-4" />
+              Escalate to Case
             </button>
           </>
         )}
@@ -355,6 +394,18 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
                 Cancel
               </button>
             )}
+            {/* Even when the slot was missed (lawyer never marked the
+                appointment COMPLETED so it didn't move to the attended
+                tab), the consultation may have actually happened — surface
+                Escalate-to-Case here too so the lawyer can hand off the
+                client without first juggling the status state. */}
+            <button
+              onClick={() => onOpenCaseCreation(appointment)}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-white transition-colors"
+            >
+              <Briefcase className="w-4 h-4" />
+              Escalate to Case
+            </button>
           </>
         )}
 
@@ -384,12 +435,15 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
               <MessageSquare className="w-4 h-4" />
               Discuss
             </button>
+            {/* Escalate-to-Case on the attended tab — the post-consultation
+                hand-off the lawyer expects to find here. Filled primary so
+                it reads as the headline action on a completed appointment. */}
             <button
               onClick={() => onOpenCaseCreation(appointment)}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-primary text-primary hover:bg-primary hover:text-white transition-colors"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold bg-primary text-white hover:bg-primary/90 transition-colors"
             >
-              <FileText className="w-4 h-4" />
-              Case Details
+              <Briefcase className="w-4 h-4" />
+              Escalate to Case
             </button>
           </>
         )}
@@ -397,46 +451,53 @@ const RenderAppointmentCard: FC<RenderAppointmentCardProps> = ({
         {/* Cancelled Tab - No buttons */}
       </div>
 
-      {/* Discussion Thread — expandable, for confirmed/attended/attendNow */}
-      {(appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED') && (
+      {/* Open Chat — navigates to the unified /lawyer/chats page with this
+          appointment's conversation pre-opened. Replaces the previous inline
+          AppointmentDiscussionPanel expandable; all chat now lives in one
+          place so messages, read receipts, and audio/video calls are
+          consistent regardless of where the user entered from.
+          Hidden on PENDING: a chat with an unconfirmed client is premature
+          — the lawyer reads the issue + docs and decides accept/reject
+          first; chat unlocks once the appointment is accepted. */}
+      {!isPending && (appointment.status === 'CONFIRMED' || appointment.status === 'COMPLETED') && (
         <div className="mt-3 pt-3 border-t border-gray-100">
           <button
-            onClick={() => setDiscussionOpen(prev => !prev)}
+            onClick={() => navigate(`/lawyer/chats?appointmentId=${appointment.id}`)}
             className="flex items-center gap-2 text-sm font-medium text-primary hover:text-primary/80 transition"
           >
             <MessageSquare className="w-4 h-4" />
-            Discussion Thread
-            {discussionOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            Open Chat
           </button>
-          {discussionOpen && (
-            <AppointmentDiscussionPanel
-              appointmentId={appointment.id}
-              otherPartyName={otherParty?.name || 'Unknown'}
-              otherPartyRole="Client"
-              userRole="lawyer"
-              onEscalateToCase={() => onOpenCaseCreation(appointment)}
-              caseId={appointment.case?.id || null}
-              meetingLink={appointment.meetingLink}
-              appointmentStatus={appointment.status}
-            />
-          )}
         </div>
       )}
 
-      {/* Documents & AI summaries — expandable */}
-      {(appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED') && (
-        <div className="mt-3 pt-3 border-t border-gray-100">
-          <button
-            onClick={() => setDocumentsOpen(prev => !prev)}
-            className="flex items-center gap-2 text-sm font-medium text-fuchsia-700 hover:text-fuchsia-800 transition"
-          >
-            <Sparkles className="w-4 h-4" />
-            Documents & AI summaries
-            {documentsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
-          {documentsOpen && <AppointmentDocumentsPanel appointmentId={appointment.id} />}
-        </div>
-      )}
+      {/* Documents & AI summaries.
+          - PENDING: render the panel inline (already has its own header so
+            we drop the collapsible wrapper — the duplicate "Documents & AI
+            summaries" rows in the previous build were the wrapper + panel
+            headers stacked on top of each other).
+          - Other states: keep the collapsible wrapper so confirmed/attended
+            cards stay compact by default. */}
+      {appointment.status === 'CONFIRMED' || appointment.status === 'PENDING' || appointment.status === 'COMPLETED' ? (
+        isPending ? (
+          /* readOnly: lawyer can't upload reference docs to a request they
+             haven't accepted yet — that capability returns the moment the
+             appointment moves to CONFIRMED. */
+          <AppointmentDocumentsPanel appointmentId={appointment.id} readOnly />
+        ) : (
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <button
+              onClick={() => setDocumentsOpen(prev => !prev)}
+              className="flex items-center gap-2 text-sm font-medium text-fuchsia-700 hover:text-fuchsia-800 transition"
+            >
+              <Sparkles className="w-4 h-4" />
+              Documents & AI summaries
+              {documentsOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            </button>
+            {documentsOpen && <AppointmentDocumentsPanel appointmentId={appointment.id} />}
+          </div>
+        )
+      ) : null}
     </div>
   )
 }

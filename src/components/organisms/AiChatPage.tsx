@@ -1,6 +1,21 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Loader2, Bot, User, Sparkles, Scale } from 'lucide-react';
+import { Send, Loader2, Bot, User, Sparkles, Scale, Trash2 } from 'lucide-react';
 import { modelChatApi } from '@/services/api';
+import { useAuthStore } from '@/stores/authStore';
+
+/**
+ * Legal Eagle AI — chat history persists across page reloads via localStorage
+ * and is scoped per user-id so different accounts don't see each other's
+ * conversations on the same device. The "Clear chat" button wipes the cache.
+ */
+const STORAGE_KEY_PREFIX = 'legalEagle:history:'
+
+interface PersistedMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  timestamp: string // ISO — JSON-safe
+}
 
 interface Message {
   id: string;
@@ -144,11 +159,52 @@ const renderInlineFormatting = (text: string): React.ReactNode => {
 };
 
 export default function AIChat() {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const userId = useAuthStore((s) => s.user?.id) ?? 'anon'
+  const storageKey = `${STORAGE_KEY_PREFIX}${userId}`
+
+  // Hydrate from localStorage on first render so the chat survives reloads
+  // and route changes. Date strings round-trip to Date objects for display.
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return []
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (!raw) return []
+      const arr = JSON.parse(raw) as PersistedMessage[]
+      return arr.map((m) => ({ ...m, timestamp: new Date(m.timestamp) }))
+    } catch {
+      return []
+    }
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Persist on every message change. Stringify dates so we can rehydrate
+  // reliably (Date instances don't survive JSON.stringify natively).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const serialised: PersistedMessage[] = messages.map((m) => ({
+        ...m,
+        timestamp: (m.timestamp instanceof Date ? m.timestamp : new Date(m.timestamp)).toISOString(),
+      }))
+      window.localStorage.setItem(storageKey, JSON.stringify(serialised))
+    } catch {
+      // localStorage might be full or disabled — silent fail is OK, chat
+      // still works for the rest of the session.
+    }
+  }, [messages, storageKey])
+
+  const clearHistory = () => {
+    if (!confirm('Clear all chat history with Legal Eagle? This cannot be undone.')) return
+    setMessages([])
+    try {
+      window.localStorage.removeItem(storageKey)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -233,6 +289,32 @@ export default function AIChat() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
+      {/* Top bar with title + Clear-chat shortcut. Only shown once a
+          conversation exists so the welcome screen stays clean. */}
+      {messages.length > 0 && (
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-200 bg-white">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Scale className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold text-midnight">Legal Eagle AI</div>
+              <div className="text-[11px] text-gray-500">
+                {messages.length} message{messages.length === 1 ? '' : 's'} in this conversation
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={clearHistory}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-700 hover:bg-red-50 border border-red-200"
+            title="Clear chat history"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Clear chat
+          </button>
+        </div>
+      )}
+
       {/* Chat Messages Area */}
       <div className="flex-1 overflow-y-auto pb-4">
         {messages.length === 0 ? (

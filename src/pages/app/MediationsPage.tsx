@@ -34,7 +34,15 @@ const MediationsPage: FC = () => {
   )
 
   const isLawyer = user?.role === 'LAWYER'
-  const detailPath = (id: string) => (isLawyer ? `/lawyer/mediation/${id}` : `/app/mediation/${id}`)
+  // Pending invites (now surfaced by the server when respondent email matches)
+  // route to the accept-invite page using the invite token, NOT the mediation
+  // detail (which doesn't exist yet because the invite hasn't been accepted).
+  const detailPath = (m: any) => {
+    if ((m as any).isPendingInvite && (m as any).inviteToken) {
+      return `/mediation/invite/${(m as any).inviteToken}`
+    }
+    return isLawyer ? `/lawyer/mediation/${m.id}` : `/app/mediation/${m.id}`
+  }
 
   return (
     <div className="space-y-6">
@@ -95,26 +103,48 @@ const MediationsPage: FC = () => {
           {filtered.map((m) => {
             const otherParty =
               m.initiatorClientId === user?.id ? m.respondentClient : m.initiatorClient
+            const isPending = (m as any).isPendingInvite === true
             return (
               <li key={m.id}>
                 <Link
-                  to={detailPath(m.id)}
-                  className="block bg-white p-5 rounded-lg border border-gray-200 hover:border-primary hover:shadow-sm transition"
+                  to={detailPath(m)}
+                  className={`block bg-white p-5 rounded-lg border transition ${
+                    isPending
+                      ? 'border-amber-200 hover:border-amber-400 ring-2 ring-amber-100'
+                      : 'border-gray-200 hover:border-primary hover:shadow-sm'
+                  }`}
                 >
                   <div className="flex items-start justify-between gap-3 flex-wrap">
                     <div>
-                      <h3 className="font-semibold text-gray-900">{m.disputeTitle}</h3>
-                      {!isLawyer && otherParty && (
-                        <p className="text-sm text-gray-500 mt-0.5">
-                          with {otherParty.name} · {otherParty.email}
+                      <h3 className="font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        {m.disputeTitle}
+                        {isPending && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                            INVITATION
+                          </span>
+                        )}
+                      </h3>
+                      {isPending ? (
+                        <p className="text-sm text-amber-800 mt-0.5">
+                          {(m as any).initiatorClient?.name || 'Someone'} invited you to mediate. Click to review and accept.
                         </p>
-                      )}
-                      {m.mediator && (
-                        <p className="text-sm text-gray-500 mt-0.5">Mediator: {m.mediator.name}</p>
+                      ) : (
+                        <>
+                          {!isLawyer && otherParty && (
+                            <p className="text-sm text-gray-500 mt-0.5">
+                              with {otherParty.name} · {otherParty.email}
+                            </p>
+                          )}
+                          {m.mediator && (
+                            <p className="text-sm text-gray-500 mt-0.5">Mediator: {m.mediator.name}</p>
+                          )}
+                        </>
                       )}
                     </div>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusBadge[m.status] || 'bg-gray-100'}`}>
-                      {prettyStatus(m.status)}
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      isPending ? 'bg-amber-100 text-amber-800' : statusBadge[m.status] || 'bg-gray-100'
+                    }`}>
+                      {isPending ? 'Action needed' : prettyStatus(m.status)}
                     </span>
                   </div>
                   <p className="text-sm text-gray-600 mt-3 line-clamp-2">{m.disputeDescription}</p>

@@ -11,7 +11,16 @@
       "Bash(echo \"TS_EXIT=$?\")",
       "Bash(npx vite *)",
       "Bash(echo \"BUILD_EXIT=$?\")",
-      "Bash(git remote *)"
+      "Bash(git remote *)",
+      "Bash(echo \"fe exit=$?\")",
+      "Read(//tmp/**)",
+      "Bash(echo \"srv exit=$?\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\chand\\\\OneDrive\\\\Desktop\\\\NexusWS\\\\NyayaX\\\\lawsuit-app\" -Force)",
+      "Bash(Select-Object -First 20)",
+      "Bash(xargs grep -l \"firms-requests\\\\|MyRequests\\\\|OrgAppointmentRequest\")",
+      "PowerShell(npx tsc --noEmit 2>&1; \"ExitCode: $LASTEXITCODE\")",
+      "Bash(npx eslint *)",
+      "Bash(echo \"exit=$?\")"
     ]
   }
 }

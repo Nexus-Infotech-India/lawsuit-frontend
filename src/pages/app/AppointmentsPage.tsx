@@ -31,22 +31,52 @@ const AppointmentsPage: FC = () => {
 
   const categorizedAppointments = useMemo(() => {
     const now = new Date()
-
+    /*
+     * Categorisation rules (matching user-facing expectations):
+     *  - "Upcoming" = strictly future appointments (scheduledAt > now) that
+     *    are PENDING/CONFIRMED. Previously this used the END time which made
+     *    in-progress meetings look "upcoming" even though their scheduled time
+     *    had already passed.
+     *  - "In progress" rolls up into Upcoming (so the user can still find the
+     *    Join button), with a separate Live badge surfaced from the card.
+     *  - "Missed" = scheduled time has fully passed AND the meeting was never
+     *    marked completed (status still PENDING/CONFIRMED).
+     *  - "Attended" requires BOTH status=COMPLETED AND scheduledAt < now, so a
+     *    future-dated row erroneously marked COMPLETED in the DB no longer
+     *    pollutes this tab.
+     *  - "Cancelled" — status check is sufficient.
+     */
+    const endOf = (apt: AppointmentData) => {
+      const start = new Date(apt.scheduledAt).getTime()
+      return new Date(start + (apt.durationMins || 30) * 60 * 1000)
+    }
     return {
       upcoming: appointments.filter(apt => {
-        const scheduledDate = new Date(apt.scheduledAt)
-        const durationMs = (apt.durationMins || 30) * 60 * 1000
-        const appointmentEndTime = new Date(scheduledDate.getTime() + durationMs)
-        return (apt.status === 'PENDING' || apt.status === 'CONFIRMED') && now < appointmentEndTime
+        const scheduled = new Date(apt.scheduledAt)
+        return (
+          (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
+          // Still "upcoming" while either the start is in the future OR the
+          // meeting window hasn't closed yet. This keeps a live meeting
+          // reachable without dragging long-past meetings into the tab.
+          now < endOf(apt) && (scheduled > now || now < endOf(apt))
+        )
       }),
       missed: appointments.filter(apt => {
-        const scheduledDate = new Date(apt.scheduledAt)
-        const durationMs = (apt.durationMins || 30) * 60 * 1000
-        const appointmentEndTime = new Date(scheduledDate.getTime() + durationMs)
-        return (apt.status === 'PENDING' || apt.status === 'CONFIRMED') && now >= appointmentEndTime
+        return (
+          (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
+          now >= endOf(apt)
+        )
       }),
-      attended: appointments.filter(apt => apt.status === 'COMPLETED'),
-      cancelled: appointments.filter(apt => apt.status === 'CANCELLED')
+      attended: appointments.filter(apt => {
+        return (
+          apt.status === 'COMPLETED' &&
+          // Sanity gate: a COMPLETED row with a future scheduledAt is a
+          // server-side data anomaly — don't show it as "attended" until the
+          // scheduled time has actually elapsed.
+          new Date(apt.scheduledAt) <= now
+        )
+      }),
+      cancelled: appointments.filter(apt => apt.status === 'CANCELLED'),
     }
   }, [appointments])
 
@@ -62,8 +92,10 @@ const AppointmentsPage: FC = () => {
     setSelectedAgreementUrl(null)
   }
 
+  // Route into the unified WhatsApp-style chat page. The list page hits
+  // /chat/appointment/:id to idempotently materialize the conversation row.
   const handleDiscuss = (appointmentId: string) => {
-    navigate(`/app/chat?appointmentId=${appointmentId}`)
+    navigate(`/app/chats?appointmentId=${appointmentId}`)
   }
 
   const handleReschedule = (appointment: AppointmentData) => {

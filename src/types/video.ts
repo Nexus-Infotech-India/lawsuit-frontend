@@ -126,6 +126,60 @@ export interface CallErrorEvent {
 }
 
 // ───────────────────────────────────────────────────────────
+// Shared-room flow (preferred — used by web)
+// ───────────────────────────────────────────────────────────
+//
+// Replaces the ring-style call:initiate / accept / decline / cancel /
+// end events with a "Daily-room-per-chat" model:
+//
+//   • Frontend → backend: call:room:ensure { chatId, callType?, mediaType? }
+//                          call:room:joined { callId }
+//                          call:room:left   { callId }
+//                          call:room:status { chatId } — read-only poll
+//   • Backend  → caller:   call:room:ready  { callId, roomUrl, token, mediaType, isNewRoom }
+//   • Backend  → chat room: call:room:state { chatId, isActive, callId?, mediaType?, startedBy?, participantCount? }
+//
+// When someone clicks "Start video call", the FE emits ensure → server
+// provisions (or fetches) a Daily room → caller gets ready + everyone
+// else in the chat gets a state broadcast → other party's CTA flips
+// from "Start" to "Join". Both sides hit ensure → both get a personal
+// meeting token for the same room.
+
+export interface CallRoomEnsurePayload {
+  chatId: string
+  callType?: CallType
+  mediaType?: 'audio' | 'video'
+}
+
+export interface CallRoomReadyEvent {
+  callId: string
+  roomUrl: string
+  token: string
+  mediaType: 'audio' | 'video'
+  /** True when this ensure call created a new Daily room; false when it joined an existing one. */
+  isNewRoom: boolean
+}
+
+export interface CallRoomStateEvent {
+  chatId: string
+  isActive: boolean
+  callId?: string
+  mediaType?: 'audio' | 'video'
+  /** userId of the participant who started the room. */
+  startedBy?: string
+  /** Current count of participants joined to the Daily room. */
+  participantCount?: number
+}
+
+export interface CallRoomJoinedPayload {
+  callId: string
+}
+
+export interface CallRoomLeftPayload {
+  callId: string
+}
+
+// ───────────────────────────────────────────────────────────
 // Call history (HTTP)
 // ───────────────────────────────────────────────────────────
 

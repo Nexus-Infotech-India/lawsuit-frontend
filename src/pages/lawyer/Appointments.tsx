@@ -2,7 +2,6 @@ import { FC, useMemo, useState } from 'react'
 import { appointmentsApi } from '@/services/api'
 import { parseISO, differenceInMinutes, isValid } from 'date-fns'
 import { useNavigate } from 'react-router-dom'
-import ChatTab from '@/components/atoms/ChatTab'
 import CreateCaseDetail from '@/components/molecules/CreateCaseDetail'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import api, { apiEndpoints } from '@/services/api'
@@ -22,8 +21,6 @@ type TabType = 'pending' | 'attendNow' | 'upcoming' | 'missed' | 'attended' | 'c
 const LawyerAppointments: FC = () => {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<TabType>('pending')
-  const [openChatId, setOpenChatId] = useState<string | null>(null)
-  const [isChatOpen, setIsChatOpen] = useState(false)
   const [selectedAppointmentForCase, setSelectedAppointmentForCase] = useState<AppointmentResponse['data'][0] | null>(null)
   const [selectedAgreementUrl, setSelectedAgreementUrl] = useState<{ appointmentId: string, aggrementUrl: string | null } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -143,24 +140,16 @@ const LawyerAppointments: FC = () => {
     return { pending, attendNow, upcoming, attended, missed, cancelled }
   }, [appointments, now])
 
-  const openChatForAppointment = async (a: AppointmentResponse['data'][0]) => {
-    try {
-      const chatModule = await import('@/services/api')
-      const chatApi = chatModule.chatApi
-      const otherUserId = a.client?.id || ''
-      if (!otherUserId) {
-        console.warn('No client id for appointment', a.id)
-        return
-      }
-      const r = await chatApi.createChat({ otherUserId })
-      const chat = (r as any).data?.chat ?? (r as any).chat
-      if (chat && chat.id) {
-        setOpenChatId(chat.id)
-        setIsChatOpen(true)
-      }
-    } catch (err) {
-      console.error('Failed to open chat', err)
+  // "Discuss" on an appointment row now deep-links into the unified
+  // /lawyer/chats page using the appointmentId — the page hits the
+  // dedicated /chat/appointment/:id endpoint that idempotently creates
+  // the conversation, so we don't need to call chatApi.createChat here.
+  const openChatForAppointment = (a: AppointmentResponse['data'][0]) => {
+    if (!a.client?.id) {
+      console.warn('No client id for appointment', a.id)
+      return
     }
+    navigate(`/lawyer/chats?appointmentId=${a.id}`)
   }
 
   const openCaseCreationForAppointment = (a: AppointmentResponse['data'][0]) => {
@@ -325,45 +314,28 @@ const LawyerAppointments: FC = () => {
                     </div>
                   ) : (
                     <div>
+                      {/* Pending appointments now reuse the full
+                          RenderAppointmentCard so the lawyer sees the
+                          client's issue description AND any uploaded
+                          documents (with OCR/extract via
+                          AppointmentDocumentsPanel) BEFORE choosing
+                          accept/reject. The card's PENDING-status branch
+                          renders Accept/Reject inline; reject hits the
+                          server's auto-refund path so the client's wallet
+                          is credited the moment the lawyer declines.
+                          See consultation.service.ts::rejectAppointment. */}
                       {pending.map(appointment =>
-                        <div key={appointment.id} className="bg-white rounded-xl border border-amber-200 p-5 mb-4 shadow-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              {appointment.client?.avatarUrl ? (
-                                <img src={appointment.client.avatarUrl} alt={appointment.client?.name} className="w-12 h-12 rounded-full object-cover" />
-                              ) : (
-                                <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-semibold text-lg">
-                                  {appointment.client?.name?.charAt(0) || '?'}
-                                </div>
-                              )}
-                              <div>
-                                <h3 className="font-semibold text-gray-900">{appointment.client?.name || 'Client'}</h3>
-                                <p className="text-sm text-gray-500">
-                                  {new Date(appointment.scheduledAt).toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}
-                                  {' at '}
-                                  {new Date(appointment.scheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                  {' • '}{appointment.durationMins || 30} mins
-                                </p>
-                                {appointment.notes && <p className="text-xs text-gray-400 mt-1">Note: {appointment.notes}</p>}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <span className="px-3 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded-full">Pending</span>
-                              <button
-                                onClick={() => handleReject(appointment)}
-                                className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 border border-red-200 rounded-lg transition"
-                              >
-                                Reject
-                              </button>
-                              <button
-                                onClick={() => handleAccept(appointment)}
-                                className="px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition"
-                              >
-                                Accept
-                              </button>
-                            </div>
-                          </div>
-                        </div>
+                        <RenderAppointmentCard
+                          key={appointment.id}
+                          appointment={appointment}
+                          tabType="pending"
+                          onAttend={handleAttend}
+                          onViewAgreement={handleViewAgreement}
+                          onUploadAgreement={handleUploadAgreement}
+                          onOpenChat={openChatForAppointment}
+                          onOpenCaseCreation={openCaseCreationForAppointment}
+                          onChanged={() => getAppointmentsQuery.refetch()}
+                        />
                       )}
                     </div>
                   )}
@@ -515,14 +487,7 @@ const LawyerAppointments: FC = () => {
           <></>
         )}
 
-        {/* Chat modal */}
-        {isChatOpen && openChatId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-            <div className="w-full max-w-4xl h-[80vh]">
-              <ChatTab chatId={openChatId} onClose={() => { setIsChatOpen(false); setOpenChatId(null) }} />
-            </div>
-          </div>
-        )}
+        {/* Discuss now navigates to /lawyer/chats — see openChatForAppointment. */}
 
         {/* Create Case Modal */}
         {selectedAppointmentForCase && (

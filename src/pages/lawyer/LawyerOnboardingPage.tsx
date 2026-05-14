@@ -8,9 +8,10 @@ import {
   lawyersApi,
   usersApi,
   courtAdminApi,
-  addressApi,
 } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
+import AddressPicker from '@/components/molecules/AddressPicker'
+import { pickCloudinaryResourceType } from '@/utils/cloudinaryUpload'
 
 interface LawyerInfoShape {
   licenseNumber?: string
@@ -24,6 +25,7 @@ interface LawyerInfoShape {
   bio?: string
   city?: string
   state?: string
+  district?: string
   pincode?: string
   address?: string
 }
@@ -90,19 +92,36 @@ const LawyerOnboardingPage: FC = () => {
     load()
   }, [])
 
-  // Pull eligible court admins when entering Step 5
+  // Pull eligible court admins when entering Step 5. We try the pincode
+  // first (most-specific) and fall back to the district-wide list when
+  // the pincode returns nothing — a single pincode covers a tiny slice of
+  // a district, so without this fallback most lawyers see an empty list
+  // and can't pick anyone to send their verification to. Mirrors the
+  // mobile `LawyerVerificationRequestScreen` discovery pattern.
   useEffect(() => {
-    if (step !== 5 || !info.pincode) return
+    if (step !== 5) return
+    if (!info.pincode && !info.district) return
     let cancelled = false
-    courtAdminApi.getAdminsByPincode(info.pincode)
-      .then((res) => {
-        if (cancelled) return
-        const data = ((res as any).data?.data ?? (res as any).data ?? []) as CourtAdminOption[]
-        setAdminOptions(Array.isArray(data) ? data : [])
-      })
-      .catch(() => !cancelled && setAdminOptions([]))
+    ;(async () => {
+      try {
+        let data: CourtAdminOption[] = []
+        if (info.pincode) {
+          const res = await courtAdminApi.getAdminsByPincode(info.pincode)
+          const list = ((res as any).data?.data ?? (res as any).data ?? []) as CourtAdminOption[]
+          data = Array.isArray(list) ? list : []
+        }
+        if (data.length === 0 && info.district) {
+          const res = await courtAdminApi.getAdminsByDistrict(info.district, info.state)
+          const list = ((res as any).data?.data ?? (res as any).data ?? []) as CourtAdminOption[]
+          data = Array.isArray(list) ? list : []
+        }
+        if (!cancelled) setAdminOptions(data)
+      } catch {
+        if (!cancelled) setAdminOptions([])
+      }
+    })()
     return () => { cancelled = true }
-  }, [step, info.pincode])
+  }, [step, info.pincode, info.district, info.state])
 
   const update = (patch: Partial<LawyerInfoShape>) => setInfo((s) => ({ ...s, ...patch }))
 
@@ -151,10 +170,16 @@ const LawyerOnboardingPage: FC = () => {
       formData.append('api_key', sig.apiKey)
       formData.append('folder', sig.folder)
 
-      const cloudRes = await fetch(`https://api.cloudinary.com/v1_1/${sig.cloudName}/auto/upload`, {
-        method: 'POST',
-        body: formData,
-      })
+      // `pickCloudinaryResourceType` lives in the shared upload util.
+      // It puts images AND PDFs on /image/upload — PDFs in particular
+      // need this so Cloudinary serves them with
+      // `Content-Type: application/pdf` (otherwise the court admin's
+      // verify page opens the URL and sees "Failed to load PDF document").
+      const resourceType = pickCloudinaryResourceType(file.type)
+      const cloudRes = await fetch(
+        `https://api.cloudinary.com/v1_1/${sig.cloudName}/${resourceType}/upload`,
+        { method: 'POST', body: formData },
+      )
       if (!cloudRes.ok) throw new Error('Cloudinary upload failed')
       const cloudData = await cloudRes.json()
       const url: string = cloudData.secure_url || cloudData.url
@@ -417,54 +442,35 @@ const LawyerOnboardingPage: FC = () => {
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-gray-900">Office location</h2>
             <p className="text-sm text-gray-500">Used for proximity search and to map you to a court admin.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Pincode</label>
-                <input
-                  value={info.pincode || ''}
-                  onChange={(e) => update({ pincode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
-                  onBlur={async () => {
-                    if (!info.pincode || info.pincode.length !== 6) return
-                    try {
-                      const res = await addressApi.getPincode(info.pincode)
-                      const data = (res.data?.data ?? res.data) as any
-                      const office = data?.postOffices?.[0] ?? data?.[0] ?? data
-                      if (office) {
-                        update({
-                          state: info.state || office.state,
-                          city: info.city || office.city || office.name,
-                        })
-                      }
-                    } catch { /* ignore */ }
-                  }}
-                  maxLength={6}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">State</label>
-                <input
-                  value={info.state || ''}
-                  onChange={(e) => update({ state: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">City</label>
-                <input
-                  value={info.city || ''}
-                  onChange={(e) => update({ city: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Address</label>
-                <input
-                  value={info.address || ''}
-                  onChange={(e) => update({ address: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                />
-              </div>
+            {/* AddressPicker centralises pincode → state/district/city
+                resolution (and shows a locality picker when the pincode
+                maps to multiple post offices). District is captured so
+                Step 5 can fall back to the wider district-based court-
+                admin list when the pincode-narrow list is empty. */}
+            <AddressPicker
+              value={{
+                pincode: info.pincode,
+                state: info.state,
+                district: info.district,
+                city: info.city,
+              }}
+              onChange={(next) =>
+                update({
+                  pincode: next.pincode,
+                  state: next.state,
+                  district: next.district,
+                  city: next.city,
+                })
+              }
+            />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">Street address</label>
+              <input
+                value={info.address || ''}
+                onChange={(e) => update({ address: e.target.value })}
+                placeholder="Building, street, landmark"
+                className="w-full px-3 py-2 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              />
             </div>
           </div>
         )}
@@ -594,7 +600,6 @@ const UploadField: FC<UploadFieldProps> = ({ label, existingUrl, uploading, onPi
         {uploading ? 'Uploading…' : existingUrl ? 'Replace' : 'Upload'}
         <input
           type="file"
-          accept="image/*,application/pdf"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]

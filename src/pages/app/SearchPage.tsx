@@ -324,24 +324,39 @@ const SearchPage: FC = () => {
               <h3 className="font-medium text-lg mb-4">Filters</h3>
 
               <div className="space-y-6">
+                {/*
+                  Location / Specialization / Maximum Fee are SINGLE-select.
+                  The server's /lawyers endpoint accepts each as a single
+                  scalar (city: string, specialization: string, maxFee: number).
+                  The previous multi-select checkboxes joined values with ","
+                  which: (a) made `Number("50000,100000") === NaN` for maxFee,
+                  and (b) made the comma-joined city/specialization not match
+                  any real lawyer. Radio inputs match the server contract
+                  exactly. Language stays multi-select because the API does
+                  accept `languages: string[]`.
+                */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Location
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Location</label>
+                    {filters.location && (
+                      <button
+                        type="button"
+                        onClick={() => removeFilter('location')}
+                        className="text-[11px] text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {filterOptions.locations.map(location => (
-                      <label key={location} className="flex items-center space-x-2">
+                      <label key={location} className="flex items-center space-x-2 cursor-pointer">
                         <input
-                          type="checkbox"
-                          checked={filters.location?.split(',').includes(location)}
-                          onChange={(e) => {
-                            const currentLocations = filters.location?.split(',').filter(Boolean) || [];
-                            const updatedLocations = e.target.checked
-                              ? [...currentLocations, location]
-                              : currentLocations.filter(loc => loc !== location);
-                            handleFilterChange('location', updatedLocations.join(',') || 'all');
-                          }}
-                          className="text-primary focus:ring-primary rounded"
+                          type="radio"
+                          name="filter-location"
+                          checked={filters.location === location}
+                          onChange={() => handleFilterChange('location', location)}
+                          className="text-primary focus:ring-primary"
                         />
                         <span className="text-sm">{location}</span>
                       </label>
@@ -350,23 +365,27 @@ const SearchPage: FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Specialization
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Specialization</label>
+                    {filters.specialization && (
+                      <button
+                        type="button"
+                        onClick={() => removeFilter('specialization')}
+                        className="text-[11px] text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-2">
                     {filterOptions.specializations.map(spec => (
-                      <label key={spec} className="flex items-center space-x-2">
+                      <label key={spec} className="flex items-center space-x-2 cursor-pointer">
                         <input
-                          type="checkbox"
-                          checked={filters.specialization?.split(',').includes(spec)}
-                          onChange={(e) => {
-                            const currentSpecs = filters.specialization?.split(',').filter(Boolean) || [];
-                            const updatedSpecs = e.target.checked
-                              ? [...currentSpecs, spec]
-                              : currentSpecs.filter(s => s !== spec);
-                            handleFilterChange('specialization', updatedSpecs.join(',') || 'all');
-                          }}
-                          className="text-primary focus:ring-primary rounded"
+                          type="radio"
+                          name="filter-specialization"
+                          checked={filters.specialization === spec}
+                          onChange={() => handleFilterChange('specialization', spec)}
+                          className="text-primary focus:ring-primary"
                         />
                         <span className="text-sm">{spec}</span>
                       </label>
@@ -375,23 +394,27 @@ const SearchPage: FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Maximum Fee
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">Maximum Fee</label>
+                    {filters.maxFee && (
+                      <button
+                        type="button"
+                        onClick={() => removeFilter('maxFee')}
+                        className="text-[11px] text-gray-500 hover:text-gray-700"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     {['50000', '100000', '150000', '250000'].map(fee => (
-                      <label key={fee} className="flex items-center space-x-2">
+                      <label key={fee} className="flex items-center space-x-2 cursor-pointer">
                         <input
-                          type="checkbox"
-                          checked={filters.maxFee?.split(',').includes(fee)}
-                          onChange={(e) => {
-                            const currentFees = filters.maxFee?.split(',').filter(Boolean) || [];
-                            const updatedFees = e.target.checked
-                              ? [...currentFees, fee]
-                              : currentFees.filter(f => f !== fee);
-                            handleFilterChange('maxFee', updatedFees.join(',') || 'all');
-                          }}
-                          className="text-primary focus:ring-primary rounded"
+                          type="radio"
+                          name="filter-maxfee"
+                          checked={filters.maxFee === fee}
+                          onChange={() => handleFilterChange('maxFee', fee)}
+                          className="text-primary focus:ring-primary"
                         />
                         <span className="text-sm">Up to ₹{(Number(fee) / 100).toLocaleString('en-IN')}</span>
                       </label>
