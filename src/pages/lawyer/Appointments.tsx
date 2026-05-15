@@ -151,17 +151,26 @@ const LawyerAppointments: FC = () => {
       upcoming.push(a)
     })
 
-    // Sort: most recent first everywhere except attendNow (closest first).
-    const desc = (x: AppointmentData, y: AppointmentData) =>
-      parseISO(y.scheduledAt).getTime() - parseISO(x.scheduledAt).getTime()
-    const asc = (x: AppointmentData, y: AppointmentData) =>
+    // Sort: most recently created first everywhere except attendNow.
+    // We sort by `createdAt` (when the booking was placed) rather than
+    // `scheduledAt` (the future date of the slot) so the lawyer sees
+    // brand-new booking requests at the top of every list — that's what
+    // "latest appointments first" means in user terms. `scheduledAt` would
+    // surface the appointment furthest in the future first, which is the
+    // opposite of what's useful.
+    // AttendNow stays ASC by scheduledAt so the slot starting soonest is
+    // most actionable (most urgent → top).
+    const recentFirst = (x: AppointmentData, y: AppointmentData) =>
+      new Date(y.createdAt || y.scheduledAt).getTime() -
+      new Date(x.createdAt || x.scheduledAt).getTime()
+    const soonestFirst = (x: AppointmentData, y: AppointmentData) =>
       parseISO(x.scheduledAt).getTime() - parseISO(y.scheduledAt).getTime()
-    pending.sort(desc)
-    attendNow.sort(asc)
-    upcoming.sort(desc)
-    attended.sort(desc)
-    missed.sort(desc)
-    cancelled.sort(desc)
+    pending.sort(recentFirst)
+    attendNow.sort(soonestFirst)
+    upcoming.sort(recentFirst)
+    attended.sort(recentFirst)
+    missed.sort(recentFirst)
+    cancelled.sort(recentFirst)
 
     return { pending, attendNow, upcoming, attended, missed, cancelled }
   }, [appointments, now])

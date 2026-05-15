@@ -50,33 +50,48 @@ const AppointmentsPage: FC = () => {
       const start = new Date(apt.scheduledAt).getTime()
       return new Date(start + (apt.durationMins || 30) * 60 * 1000)
     }
+    // Most recently BOOKED first — `createdAt` so a brand-new request
+    // jumps to the top regardless of how far in the future its slot is.
+    // Falls back to scheduledAt for older rows that might not have
+    // createdAt populated (shouldn't happen on modern data, but defensive).
+    const recentFirst = (a: AppointmentData, b: AppointmentData) =>
+      new Date(b.createdAt || b.scheduledAt).getTime() -
+      new Date(a.createdAt || a.scheduledAt).getTime()
     return {
-      upcoming: appointments.filter(apt => {
-        const scheduled = new Date(apt.scheduledAt)
-        return (
-          (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
-          // Still "upcoming" while either the start is in the future OR the
-          // meeting window hasn't closed yet. This keeps a live meeting
-          // reachable without dragging long-past meetings into the tab.
-          now < endOf(apt) && (scheduled > now || now < endOf(apt))
-        )
-      }),
-      missed: appointments.filter(apt => {
-        return (
-          (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
-          now >= endOf(apt)
-        )
-      }),
-      attended: appointments.filter(apt => {
-        return (
-          apt.status === 'COMPLETED' &&
-          // Sanity gate: a COMPLETED row with a future scheduledAt is a
-          // server-side data anomaly — don't show it as "attended" until the
-          // scheduled time has actually elapsed.
-          new Date(apt.scheduledAt) <= now
-        )
-      }),
-      cancelled: appointments.filter(apt => apt.status === 'CANCELLED'),
+      upcoming: appointments
+        .filter(apt => {
+          const scheduled = new Date(apt.scheduledAt)
+          return (
+            (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
+            // Still "upcoming" while either the start is in the future OR the
+            // meeting window hasn't closed yet. This keeps a live meeting
+            // reachable without dragging long-past meetings into the tab.
+            now < endOf(apt) && (scheduled > now || now < endOf(apt))
+          )
+        })
+        .sort(recentFirst),
+      missed: appointments
+        .filter(apt => {
+          return (
+            (apt.status === 'PENDING' || apt.status === 'CONFIRMED') &&
+            now >= endOf(apt)
+          )
+        })
+        .sort(recentFirst),
+      attended: appointments
+        .filter(apt => {
+          return (
+            apt.status === 'COMPLETED' &&
+            // Sanity gate: a COMPLETED row with a future scheduledAt is a
+            // server-side data anomaly — don't show it as "attended" until the
+            // scheduled time has actually elapsed.
+            new Date(apt.scheduledAt) <= now
+          )
+        })
+        .sort(recentFirst),
+      cancelled: appointments
+        .filter(apt => apt.status === 'CANCELLED')
+        .sort(recentFirst),
     }
   }, [appointments])
 
