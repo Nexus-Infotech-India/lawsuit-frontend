@@ -86,7 +86,7 @@ const mockNotifications: MockNotification[] = [
   {
     id: 'n1',
     userId: 'user_001',
-    title: 'Welcome to Lawsuit',
+    title: 'Welcome to NyayaX',
     body: 'Thanks for joining our platform',
     type: 'APPOINTMENT_CONFIRMED',
     data: {},

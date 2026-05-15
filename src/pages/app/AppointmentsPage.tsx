@@ -1,10 +1,16 @@
 import { FC, useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import api, { apiEndpoints, appointmentsApi } from '@/services/api'
 import { useQuery } from '@tanstack/react-query'
+import { Briefcase, User } from 'lucide-react'
 import AgreementModal from '@/components/atoms/AgreementModal'
 import RescheduleModal from '@/components/molecules/RescheduleModal'
 import RenderAppointmentCard, { AppointmentData } from './RenderAppointmentCard'
+// Firm-appointments view is rendered INLINE from the legacy
+// `MyFirmRequestsPage` component. We keep that component intact so the
+// org-side request flow it implements (Razorpay re-checkout, cancel, etc.)
+// doesn't have to be duplicated here.
+import MyFirmRequestsPage from './firms/MyFirmRequestsPage'
 
 interface AppointmentResponse {
   data: AppointmentData[]
@@ -12,8 +18,26 @@ interface AppointmentResponse {
 
 type TabType = 'upcoming' | 'missed' | 'attended' | 'cancelled'
 
+/**
+ * Two top-level views on this page:
+ *   - 'lawyer' (default) — direct lawyer bookings, status sub-tabs
+ *   - 'firm'   — your firm-routed requests (renders MyFirmRequestsPage)
+ * State is persisted in the URL (`?view=firm`) so a deep-link or refresh
+ * lands on the same tab, AND so the existing `/app/firms-requests`
+ * redirect can preserve intent by sending users to `?view=firm`.
+ */
+type ViewMode = 'lawyer' | 'firm'
+
 const AppointmentsPage: FC = () => {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const view: ViewMode = searchParams.get('view') === 'firm' ? 'firm' : 'lawyer'
+  const switchView = (next: ViewMode) => {
+    const sp = new URLSearchParams(searchParams)
+    if (next === 'firm') sp.set('view', 'firm')
+    else sp.delete('view')
+    setSearchParams(sp, { replace: true })
+  }
   const [activeTab, setActiveTab] = useState<TabType>('upcoming')
   const [selectedAgreementUrl, setSelectedAgreementUrl] = useState<{ appointmentId: string, aggrementUrl: string | null } | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -157,12 +181,57 @@ const AppointmentsPage: FC = () => {
   return (
     <div className="min-h-screen bg-gray-50 px-3 py-4 sm:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="mb-6 sm:mb-8">
+        <div className="mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-semibold text-primary mb-1 sm:mb-2">Appointments</h1>
-          <p className="text-sm sm:text-base text-secondary">Manage and track all your appointments</p>
+          <p className="text-sm sm:text-base text-secondary">
+            {view === 'firm'
+              ? 'Consultations routed through law firms.'
+              : 'Manage and track all your direct lawyer appointments.'}
+          </p>
         </div>
 
-        {/* Tabs — horizontal scroll on mobile */}
+        {/* Top-level view switch — Lawyer appointments vs Firm appointments.
+            Two distinct surfaces sharing the same page so users have a single
+            "Appointments" entry in the nav for both flows. */}
+        <div className="mb-4 sm:mb-6 inline-flex rounded-xl border border-gray-200 bg-white p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => switchView('lawyer')}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition ${
+              view === 'lawyer'
+                ? 'bg-primary text-white shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            aria-pressed={view === 'lawyer'}
+          >
+            <User className="w-4 h-4" />
+            Lawyer appointments
+          </button>
+          <button
+            type="button"
+            onClick={() => switchView('firm')}
+            className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition ${
+              view === 'firm'
+                ? 'bg-primary text-white shadow'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+            aria-pressed={view === 'firm'}
+          >
+            <Briefcase className="w-4 h-4" />
+            Firm appointments
+          </button>
+        </div>
+
+        {/* Firm view delegates to the legacy MyFirmRequestsPage —
+            don't render the status-tabs below in this mode. */}
+        {view === 'firm' && (
+          <div className="bg-white rounded-xl border border-gray-100 p-2 sm:p-4">
+            <MyFirmRequestsPage />
+          </div>
+        )}
+
+        {/* Tabs + content — horizontal scroll on mobile */}
+        {view === 'lawyer' && (<>
         <div className="bg-white border-b border-gray-200 mb-4 sm:mb-6 -mx-3 sm:mx-0 overflow-x-auto">
           <div className="flex min-w-max sm:min-w-0">
             {tabs.map(tab => (
@@ -223,6 +292,7 @@ const AppointmentsPage: FC = () => {
             </div>
           )}
         </div>
+        </>)}
 
         {/* Agreement Modal */}
         {selectedAgreementUrl ? selectedAgreementUrl.aggrementUrl ? (

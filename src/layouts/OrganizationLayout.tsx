@@ -9,6 +9,7 @@ import { useNotificationSocket } from '../hooks/useNotificationSocket'
 import { useOrganizationStore } from '../stores/organizationStore'
 import UserMenu from '../components/molecules/UserMenu'
 import ErrorBoundary from '../components/organisms/ErrorBoundary'
+import BrandLogo from '../components/atoms/BrandLogo'
 
 /**
  * Layout for ORGANIZATION (law-firm) users.
@@ -116,10 +117,10 @@ const OrganizationLayout: FC = () => {
         <div className="max-w-full px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16 gap-3">
             <div className="flex items-center min-w-0 flex-1">
+              {/* Brand — NyayaX with the org subtitle so users can tell at
+                  a glance which surface they're on. */}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/organization/dashboard">
-                  <h1 className="text-xl lg:text-2xl font-bold text-primary whitespace-nowrap">Lawsuit · Org</h1>
-                </Link>
+                <BrandLogo to="/organization/dashboard" subtitle="Org" />
               </div>
               <div className="hidden sm:flex sm:items-center sm:ml-3 lg:ml-6 sm:space-x-4 md:space-x-6 lg:space-x-7 min-w-0 flex-1">
                 {primaryNav.map((item) => (

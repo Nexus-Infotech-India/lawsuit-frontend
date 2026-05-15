@@ -11,6 +11,7 @@ import useWalletStore from '../stores/walletStore'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import UserMenu from '../components/molecules/UserMenu'
+import BrandLogo from '../components/atoms/BrandLogo'
 
 const LawyerLayout: FC = () => {
   const location = useLocation()
@@ -123,11 +124,9 @@ const LawyerLayout: FC = () => {
         <div className="max-w-full px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16 gap-3">
             <div className="flex items-center min-w-0 flex-1">
-              {/* Logo */}
+              {/* Brand — animated NyayaX wordmark links to dashboard. */}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/lawyer/dashboard">
-                  <h1 className="text-xl lg:text-2xl font-bold text-primary">Lawsuit</h1>
-                </Link>
+                <BrandLogo to="/lawyer/dashboard" />
               </div>
 
               {/* Desktop Navigation — 5 primary + grouped More dropdown */}

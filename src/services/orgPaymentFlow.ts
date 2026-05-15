@@ -40,7 +40,7 @@ export async function startOrgRequestRazorpayCheckout(opts: StartCheckoutOptions
   }
 
   const rzpKey = (import.meta.env.VITE_RAZORPAY_KEY as string) || ''
-  const orgName = request?.organization?.name || 'Lawsuit'
+  const orgName = request?.organization?.name || 'NyayaX'
   const lawyerName = request?.assignedLawyer?.name
 
   const options: any = {

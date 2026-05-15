@@ -93,7 +93,7 @@ const LexRatesTable: FC = () => {
           </p>
           <div className="mt-10 flex justify-center items-center gap-3">
             <Gavel className="w-10 h-10 text-accent" />
-            <span className="text-2xl font-bold text-accent">Powered by Lawsuit</span>
+            <span className="text-2xl font-bold text-accent">Powered by NyayaX</span>
           </div>
         </div>
       </section>

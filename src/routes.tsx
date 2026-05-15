@@ -285,7 +285,10 @@ const AppRoutes = () => {
         {/* Law firms (organization) discovery & booking */}
         <Route path="firms" element={<FirmsListPage />} />
         <Route path="firms/:id" element={<FirmDetailPage />} />
-        <Route path="firms-requests" element={<MyFirmRequestsPage />} />
+        {/* Legacy path — firm requests are now a tab inside Appointments
+            (Lawyer | Firm switcher). Redirect preserves any existing
+            bookmarks / push-notification deep-links. */}
+        <Route path="firms-requests" element={<Navigate to="/app/appointments?view=firm" replace />} />
 
         {/* Standalone chat list + document AI (mobile-app parity) */}
         <Route path="chats" element={<ChatListPage />} />

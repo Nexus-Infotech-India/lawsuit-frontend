@@ -11,6 +11,7 @@ import useWalletStore from '../stores/walletStore'
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import UserMenu from '../components/molecules/UserMenu'
+import BrandLogo from '../components/atoms/BrandLogo'
 
 const AppLayout: FC = () => {
   const location = useLocation()
@@ -61,6 +62,9 @@ const AppLayout: FC = () => {
   const primaryNav = [
     { name: 'Home', path: '/app/home' },
     { name: 'Find Lawyers', path: '/app/search' },
+    // Law Firms promoted out of the "More → Browse" group into the top
+    // nav — it's a first-class discovery surface, not a sub-page.
+    { name: 'Law Firms', path: '/app/firms' },
     { name: 'Appointments', path: '/app/appointments' },
     { name: 'Cases', path: '/app/cases' },
     { name: 'Chats', path: '/app/chats' },
@@ -70,8 +74,9 @@ const AppLayout: FC = () => {
     {
       heading: 'Browse',
       items: [
-        { name: 'Law Firms', path: '/app/firms' },
-        { name: 'Firm Requests', path: '/app/firms-requests' },
+        // "Law Firms" moved into primaryNav above. The legacy "Firm Requests"
+        // page is now merged into Appointments as a tab — link removed from
+        // here so users find both surfaces under /app/appointments.
         { name: 'Lex Rates', path: '/app/lex-rates' },
       ],
     },
@@ -148,11 +153,9 @@ const AppLayout: FC = () => {
         <div className="max-w-full px-3 sm:px-4 lg:px-6">
           <div className="flex items-center justify-between h-16 gap-3">
             <div className="flex items-center min-w-0 flex-1">
-              {/* Logo */}
+              {/* Brand — animated NyayaX wordmark links to home. */}
               <div className="flex-shrink-0 flex items-center">
-                <Link to="/app/home">
-                  <h1 className="text-xl lg:text-2xl font-bold text-primary">Lawsuit</h1>
-                </Link>
+                <BrandLogo to="/app/home" />
               </div>
 
               {/* Desktop Navigation — 5 primary items + a grouped "More"

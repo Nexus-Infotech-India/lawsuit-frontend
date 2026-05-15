@@ -120,12 +120,16 @@ const AdminLayout: FC = () => {
             title="Go to dashboard"
             className="flex items-center gap-2.5 rounded-md hover:opacity-90 transition-opacity"
           >
+            {/* Glyph block — kept compact for the collapsed sidebar mode.
+                Letter is "N" for NyayaX. */}
             <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-800 text-white flex items-center justify-center font-bold shadow-sm">
-              L
+              N
             </div>
             {!collapsed && (
               <div className="flex flex-col leading-tight">
-                <span className="font-semibold text-gray-900">Lawsuit</span>
+                <span className="font-semibold text-gray-900">
+                  Nyaya<span className="text-amber-500">X</span>
+                </span>
                 <span className="text-[10px] uppercase tracking-wider text-indigo-600 font-medium">Admin</span>
               </div>
             )}
