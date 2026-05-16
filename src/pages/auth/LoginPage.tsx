@@ -114,9 +114,18 @@ const LoginPage: FC = () => {
     return null
   })()
 
-  const [step, setStep] = useState<'pick' | 'form'>(presetRole ? 'form' : 'pick')
+  // `?email=` prefills the field (mediation invite "Log In" link sends the
+  // invited address). `?returnTo=` is where we land after a successful
+  // login instead of the role dashboard (so the invitee goes straight
+  // back to the invite-accept page).
+  const presetEmail = searchParams.get('email') || ''
+  const returnTo = searchParams.get('returnTo')
+
+  const [step, setStep] = useState<'pick' | 'form'>(
+    presetRole || presetEmail ? 'form' : 'pick',
+  )
   const [role, setRole] = useState<UserRole>(presetRole ?? 'client')
-  const [formData, setFormData] = useState({ email: '', password: '' })
+  const [formData, setFormData] = useState({ email: presetEmail, password: '' })
 
   // Keep deep-link param in sync if it changes after mount (rare, but safe).
   useEffect(() => {
@@ -164,7 +173,14 @@ const LoginPage: FC = () => {
         return
       }
 
-      navigate(activeCard.redirectTo, { replace: true })
+      // Honour an explicit return target (e.g. the mediation invite
+      // page) over the default role dashboard. Only allow same-origin
+      // relative paths so the param can't be used as an open redirect.
+      if (returnTo && returnTo.startsWith('/') && !returnTo.startsWith('//')) {
+        navigate(returnTo, { replace: true })
+      } else {
+        navigate(activeCard.redirectTo, { replace: true })
+      }
     } catch (err) {
       console.error('Login failed:', err)
     }

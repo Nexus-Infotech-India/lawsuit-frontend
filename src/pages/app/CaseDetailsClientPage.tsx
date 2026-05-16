@@ -302,7 +302,11 @@ export default function CaseDetailsClientPage() {
                                         if (caseData.mediation?.id) {
                                             navigate(`/app/mediation/${caseData.mediation.id}`);
                                         } else {
-                                            navigate(`/app/mediations/new?caseId=${caseData.id}`);
+                                            // Draft-free legacy flow: emails the other party
+                                            // immediately on send (no DRAFT limbo). caseId
+                                            // auto-attaches this case's lawyer as the
+                                            // initiator lawyer.
+                                            navigate(`/app/mediation/new?caseId=${caseData.id}`);
                                         }
                                     }}
                                     className="bg-accent/10 text-accent px-4 py-2 rounded-lg hover:bg-accent/20 transition-colors text-left flex items-center gap-3 group"

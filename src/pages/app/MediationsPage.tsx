@@ -1,9 +1,17 @@
 import { FC, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { mediationApi } from '@/services/api'
 import { useAuthStore } from '@/stores/authStore'
 import type { Mediation } from '@/types/mediation'
+
+interface EditInviteState {
+  inviteId: string
+  respondentEmail: string
+  respondentName: string
+  disputeTitle: string
+  disputeDescription: string
+}
 
 const statusBadge: Record<string, string> = {
   AWAITING_RESPONDENT_LAWYER: 'bg-amber-100 text-amber-800',
@@ -21,9 +29,25 @@ const MediationsPage: FC = () => {
   const navigate = useNavigate()
   const [tab, setTab] = useState<'active' | 'concluded'>('active')
 
+  const [editing, setEditing] = useState<EditInviteState | null>(null)
+
   const q = useQuery({
     queryKey: ['mediations'],
     queryFn: async () => (await mediationApi.list()).data.data as Mediation[],
+  })
+
+  const saveEdit = useMutation({
+    mutationFn: (s: EditInviteState) =>
+      mediationApi.editInvite(s.inviteId, {
+        respondentEmail: s.respondentEmail,
+        respondentName: s.respondentName,
+        disputeTitle: s.disputeTitle,
+        disputeDescription: s.disputeDescription,
+      }),
+    onSuccess: () => {
+      setEditing(null)
+      q.refetch()
+    },
   })
 
   const items = q.data ?? []
@@ -104,6 +128,54 @@ const MediationsPage: FC = () => {
             const otherParty =
               m.initiatorClientId === user?.id ? m.respondentClient : m.initiatorClient
             const isPending = (m as any).isPendingInvite === true
+            const isInitiatorInvite = (m as any).isInitiatorInvite === true
+
+            // An invite THIS user sent (still pending). Render as an
+            // editable card — no accept link (that's the recipient's).
+            if (isInitiatorInvite) {
+              const rEmail = (m as any).respondentClient?.email || ''
+              const rName = (m as any).respondentClient?.name || ''
+              return (
+                <li key={m.id}>
+                  <div className="block bg-white p-5 rounded-lg border border-amber-200 ring-2 ring-amber-100">
+                    <div className="flex items-start justify-between gap-3 flex-wrap">
+                      <div>
+                        <h3 className="font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                          {m.disputeTitle}
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+                            INVITATION SENT
+                          </span>
+                        </h3>
+                        <p className="text-sm text-amber-800 mt-0.5">
+                          Waiting for {rName || rEmail} to accept. You can edit this until they do.
+                        </p>
+                      </div>
+                      <span className="px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                        Pending
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-3 line-clamp-2">{m.disputeDescription}</p>
+                    <div className="mt-3">
+                      <button
+                        onClick={() =>
+                          setEditing({
+                            inviteId: (m as any).inviteId,
+                            respondentEmail: rEmail,
+                            respondentName: rName,
+                            disputeTitle: m.disputeTitle,
+                            disputeDescription: m.disputeDescription,
+                          })
+                        }
+                        className="px-4 py-1.5 rounded-lg border border-primary text-primary text-sm font-medium hover:bg-primary hover:text-white transition"
+                      >
+                        Edit invitation
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              )
+            }
+
             return (
               <li key={m.id}>
                 <Link
@@ -153,6 +225,102 @@ const MediationsPage: FC = () => {
             )
           })}
         </ul>
+      )}
+
+      {/* Edit-invitation modal — initiator only, before the other party
+          accepts. Changing the email re-sends the invite link server-side. */}
+      {editing && (
+        <div
+          className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+          onClick={() => !saveEdit.isPending && setEditing(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-xl w-full max-w-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Edit invitation</h3>
+              <button
+                onClick={() => !saveEdit.isPending && setEditing(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+                aria-label="Close"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs text-gray-500">
+                You can change these until the other party accepts. Changing the email re-sends
+                the invitation link to the new address.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Other party email
+                  </label>
+                  <input
+                    type="email"
+                    value={editing.respondentEmail}
+                    onChange={(e) => setEditing({ ...editing, respondentEmail: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Other party name
+                  </label>
+                  <input
+                    value={editing.respondentName}
+                    onChange={(e) => setEditing({ ...editing, respondentName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Dispute title</label>
+                <input
+                  value={editing.disputeTitle}
+                  onChange={(e) => setEditing({ ...editing, disputeTitle: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Dispute description
+                </label>
+                <textarea
+                  rows={4}
+                  value={editing.disputeDescription}
+                  onChange={(e) =>
+                    setEditing({ ...editing, disputeDescription: e.target.value })
+                  }
+                  className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+              {saveEdit.isError && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded p-2">
+                  {(saveEdit.error as any)?.response?.data?.error || 'Failed to save changes'}
+                </div>
+              )}
+              <div className="flex justify-end gap-3 pt-1">
+                <button
+                  onClick={() => setEditing(null)}
+                  disabled={saveEdit.isPending}
+                  className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => saveEdit.mutate(editing)}
+                  disabled={saveEdit.isPending}
+                  className="px-5 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark disabled:opacity-60"
+                >
+                  {saveEdit.isPending ? 'Saving…' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -824,7 +824,18 @@ export const mediationApi = {
     disputeTitle: string
     disputeDescription: string
     initiatorLawyerId?: string
+    caseId?: string
   }) => api.post('/mediations/invites', data),
+  /** Initiator edits a still-PENDING invite (dispute / respondent email+name). */
+  editInvite: (
+    inviteId: string,
+    data: {
+      respondentEmail?: string
+      respondentName?: string
+      disputeTitle?: string
+      disputeDescription?: string
+    },
+  ) => api.patch(`/mediations/invites/${inviteId}`, data),
   getInviteByToken: (token: string) => api.get(`/mediations/invites/public/${token}`),
   acceptInvite: (token: string) => api.post(`/mediations/invites/${token}/accept`),
   declineInvite: (token: string) => api.post(`/mediations/invites/${token}/decline`),

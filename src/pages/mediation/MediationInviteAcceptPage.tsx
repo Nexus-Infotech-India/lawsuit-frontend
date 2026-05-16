@@ -115,7 +115,7 @@ const MediationInviteAcceptPage: FC = () => {
                   Sign Up
                 </Link>
                 <Link
-                  to={`/auth/login?returnTo=${encodeURIComponent(`/mediation/invite/${token}`)}`}
+                  to={`/auth/login?email=${encodeURIComponent(invite.respondentEmail)}&returnTo=${encodeURIComponent(`/mediation/invite/${token}`)}`}
                   className="px-4 py-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
                 >
                   Log In
