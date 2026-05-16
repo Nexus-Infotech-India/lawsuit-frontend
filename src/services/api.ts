@@ -826,6 +826,9 @@ export const mediationApi = {
     initiatorLawyerId?: string
     caseId?: string
   }) => api.post('/mediations/invites', data),
+  /** Resend the existing pending invite email to the same recipient. */
+  resendInvite: (respondentEmail: string) =>
+    api.post('/mediations/invites/resend', { respondentEmail }),
   /** Initiator edits a still-PENDING invite (dispute / respondent email+name). */
   editInvite: (
     inviteId: string,

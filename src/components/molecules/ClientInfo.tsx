@@ -47,10 +47,38 @@ interface ClientInfoShape {
   casteProofUrl?: string
 }
 
+// Legacy rows stored gender/caste in mixed case (e.g. "Male", "general").
+// The server Zod schema only accepts the UPPERCASE enum, so echoing a
+// legacy value straight back on save → 400 "Failed to save client info".
+// Coerce known values to the enum; return undefined for anything that
+// can't be mapped so it's simply omitted (unchanged in the DB) rather
+// than rejected.
+const VALID_GENDERS: Gender[] = ['MALE', 'FEMALE', 'OTHER', 'PREFER_NOT_TO_SAY']
+const VALID_CASTES: Caste[] = ['GENERAL', 'OBC', 'SC', 'ST', 'EWS', 'OTHER']
+
+const coerceGender = (v: any): Gender | undefined => {
+  if (typeof v !== 'string' || !v.trim()) return undefined
+  const up = v.trim().toUpperCase().replace(/[\s-]+/g, '_')
+  return (VALID_GENDERS as string[]).includes(up) ? (up as Gender) : undefined
+}
+const coerceCaste = (v: any): Caste | undefined => {
+  if (typeof v !== 'string' || !v.trim()) return undefined
+  const up = v.trim().toUpperCase()
+  return (VALID_CASTES as string[]).includes(up) ? (up as Caste) : undefined
+}
+const isHttpUrl = (v: any): v is string =>
+  typeof v === 'string' && /^https?:\/\//i.test(v.trim())
+
 const normalizeResponse = (data: any): ClientInfoShape => {
   const raw = data?.data ?? data ?? {}
   const payload = raw.client ?? raw
-  return { ...payload }
+  return {
+    ...payload,
+    // Map legacy casing so the dropdowns show the right selection AND a
+    // subsequent save sends a schema-valid value.
+    gender: coerceGender(payload?.gender),
+    caste: coerceCaste(payload?.caste),
+  }
 }
 
 const ClientInfo: React.FC = () => {
@@ -138,14 +166,26 @@ const ClientInfo: React.FC = () => {
       // `.nullable()`, so echoing back the nulls Prisma returns for unset
       // columns (e.g. unfilled income/caste proofs) triggers a 400.
       const payload: Record<string, any> = {}
+      // Plain free-text strings — sent as-is when non-empty.
       const stringKeys: (keyof ClientInfoShape | 'district')[] = [
-        'country', 'state', 'pincode', 'district', 'city',
-        'dob', 'gender', 'caste', 'incomeProofUrl', 'casteProofUrl',
+        'country', 'state', 'district', 'city', 'dob',
       ]
       for (const k of stringKeys) {
         const v = (form as any)[k]
         if (typeof v === 'string' && v.trim() !== '') payload[k] = v
       }
+      // Schema-constrained fields — only send when they satisfy the
+      // server's Zod rules, otherwise omit (leaves the DB value as-is)
+      // instead of triggering a 400.
+      if (typeof form.pincode === 'string' && /^\d{6}$/.test(form.pincode.trim())) {
+        payload.pincode = form.pincode.trim()
+      }
+      const g = coerceGender(form.gender)
+      if (g) payload.gender = g
+      const c = coerceCaste(form.caste)
+      if (c) payload.caste = c
+      if (isHttpUrl(form.incomeProofUrl)) payload.incomeProofUrl = form.incomeProofUrl!.trim()
+      if (isHttpUrl(form.casteProofUrl)) payload.casteProofUrl = form.casteProofUrl!.trim()
       if (typeof form.income === 'number' && Number.isFinite(form.income)) {
         payload.income = form.income
       }

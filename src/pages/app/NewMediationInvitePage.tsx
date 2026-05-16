@@ -62,6 +62,17 @@ const NewMediationInvitePage: FC = () => {
     onError: (err: any) => setError(err?.response?.data?.error || 'Failed to send invite'),
   })
 
+  const resend = useMutation({
+    mutationFn: () => mediationApi.resendInvite(form.respondentEmail),
+    onSuccess: () => navigate('/app/mediations'),
+    onError: (err: any) =>
+      setError(err?.response?.data?.error || 'Failed to resend invitation'),
+  })
+
+  // The server returns this exact message when a PENDING invite already
+  // exists for the email — that's when we offer "Resend" instead.
+  const pendingExists = /pending invite already exists/i.test(error || '')
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
@@ -159,7 +170,22 @@ const NewMediationInvitePage: FC = () => {
         </div>
 
         {error && (
-          <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded p-2">{error}</div>
+          <div
+            className={`text-sm rounded p-3 border ${
+              pendingExists
+                ? 'text-amber-800 bg-amber-50 border-amber-200'
+                : 'text-red-600 bg-red-50 border-red-100'
+            }`}
+          >
+            <p>{error}</p>
+            {pendingExists && (
+              <p className="mt-1 text-amber-700">
+                You already invited <strong>{form.respondentEmail}</strong>. You can resend the
+                same invitation email to them, or edit the pending invite from your Mediations
+                list.
+              </p>
+            )}
+          </div>
         )}
 
         <div className="flex items-center justify-end gap-3 pt-2">
@@ -170,13 +196,24 @@ const NewMediationInvitePage: FC = () => {
           >
             Cancel
           </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="px-5 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark disabled:opacity-60"
-          >
-            {mutation.isPending ? 'Sending…' : 'Send Invite'}
-          </button>
+          {pendingExists ? (
+            <button
+              type="button"
+              onClick={() => resend.mutate()}
+              disabled={resend.isPending}
+              className="px-5 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium hover:bg-amber-700 disabled:opacity-60"
+            >
+              {resend.isPending ? 'Resending…' : 'Resend invitation'}
+            </button>
+          ) : (
+            <button
+              type="submit"
+              disabled={mutation.isPending}
+              className="px-5 py-2 rounded-lg bg-primary text-white text-sm font-medium hover:bg-primary-dark disabled:opacity-60"
+            >
+              {mutation.isPending ? 'Sending…' : 'Send Invite'}
+            </button>
+          )}
         </div>
       </form>
     </div>
