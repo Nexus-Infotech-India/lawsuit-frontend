@@ -126,6 +126,12 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
   // failures — we don't want a 10MB-too-big toast to wipe the conversation.
   const [transientError, setTransientError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
+  // WhatsApp-style staging: a picked file is uploaded immediately but
+  // NOT sent — it sits here as a preview until the user hits Send (with
+  // an optional caption typed in the text box). Cleared on send/remove.
+  const [staged, setStaged] = useState<
+    { url: string; filename: string; mimeType: string | null; size: number } | null
+  >(null)
   const messagesRef = useRef<HTMLDivElement | null>(null)
   const isFirstLoad = useRef(true)
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
@@ -393,7 +399,11 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
   }, [activeChatId])
 
   const send = async () => {
-    if (!text.trim() || !activeChatId) return
+    if (!activeChatId) return
+    // Allow sending when there's text OR a staged attachment (file-only
+    // messages are valid, like WhatsApp). Block while still uploading.
+    if (uploading) return
+    if (!text.trim() && !staged) return
 
     // Stop typing indicator
     if (typingTimeoutRef.current) {
@@ -402,24 +412,64 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
     socketService.stopTyping(activeChatId)
 
     const messageText = text.trim()
+    const attach = staged
     setText('') // Clear immediately for better UX
+    setStaged(null)
+
+    // Optimistic bubble (text + the staged file, if any).
+    const tempId = `temp-${Date.now()}`
+    const optimistic: Message = {
+      id: tempId,
+      text: messageText,
+      senderId: authUserId || '',
+      createdAt: new Date().toISOString(),
+      isRead: false,
+      readAt: null,
+      documents: attach
+        ? [
+            {
+              id: `temp-doc-${Date.now()}`,
+              filename: attach.filename,
+              mimeType: attach.mimeType,
+              url: attach.url,
+              size: attach.size,
+            },
+          ]
+        : [],
+    }
+    setMessages((prev) => [...prev, optimistic])
 
     try {
-      // Send via API (this stores in DB and emits via socket)
-      const res = await chatApi.sendMessage(activeChatId, { text: messageText })
+      const payload: any = { text: messageText }
+      if (attach) {
+        payload.attachments = [attach.url]
+        payload.attachmentMetas = [
+          {
+            url: attach.url,
+            filename: attach.filename,
+            mimeType: attach.mimeType || undefined,
+            size: attach.size,
+          },
+        ]
+      }
+      const res = await chatApi.sendMessage(activeChatId, payload)
       const data = (res as any).data ?? res
       const msg = data.message ?? data
 
       if (msg) {
         setMessages((prev) => {
-          // Avoid duplicates (socket might have already added it)
-          if (prev.some((m) => m.id === msg.id)) return prev
-          return [...prev, toMessage(msg, authUserId)]
+          const next = prev.filter((m) => m.id !== tempId)
+          if (next.some((m) => m.id === msg.id)) return next
+          return [...next, toMessage(msg, authUserId)]
         })
       }
     } catch (err) {
       console.error('Failed to send message', err)
-      setText(messageText) // Restore text on error
+      // Roll back optimistic bubble + restore the composer state so the
+      // user can retry.
+      setMessages((prev) => prev.filter((m) => m.id !== tempId))
+      setText(messageText)
+      if (attach) setStaged(attach)
     }
   }
 
@@ -449,28 +499,6 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
 
     setTransientError(null)
     setUploading(true)
-
-    // Optimistic message — synthetic temp id so we can reconcile when the
-    // real message arrives via socket / send-response.
-    const tempId = `temp-${Date.now()}`
-    const optimistic: Message = {
-      id: tempId,
-      text: '',
-      senderId: authUserId || '',
-      createdAt: new Date().toISOString(),
-      isRead: false,
-      readAt: null,
-      documents: [
-        {
-          id: `temp-doc-${Date.now()}`,
-          filename: file.name,
-          mimeType: file.type || null,
-          url: '',
-          size: file.size,
-        },
-      ],
-    }
-    setMessages((prev) => [...prev, optimistic])
 
     try {
       const sigRes = await storageApi.getSignature('chat-attachments')
@@ -505,35 +533,18 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
       const url: string = uploaded.secure_url || uploaded.url
       if (!url) throw new Error('Upload succeeded but no URL was returned')
 
-      // Persist the message with the real URL + meta.
-      const sendRes = await chatApi.sendMessage(activeChatId, {
-        text: '',
-        attachments: [url],
-        attachmentMetas: [
-          {
-            url,
-            filename: file.name,
-            mimeType: file.type || undefined,
-            size: file.size,
-          },
-        ],
+      // WhatsApp behaviour: the file is uploaded but NOT sent yet. Stage
+      // it as a preview; `send()` attaches it to the message when the
+      // user hits Send (optionally with a typed caption).
+      setStaged({
+        url,
+        filename: file.name,
+        mimeType: file.type || null,
+        size: file.size,
       })
-      const data = (sendRes as any).data ?? sendRes
-      const realMsg = data.message ?? data
-      if (realMsg) {
-        setMessages((prev) => {
-          // Replace the optimistic placeholder; if the socket already
-          // delivered the real message, just drop the placeholder.
-          const next = prev.filter((m) => m.id !== tempId)
-          if (next.some((m) => m.id === realMsg.id)) return next
-          return [...next, toMessage(realMsg, authUserId)]
-        })
-      }
     } catch (err: any) {
       console.error('Failed to upload attachment', err)
       setTransientError(err?.message || 'Failed to upload file')
-      // Roll back the optimistic placeholder on failure.
-      setMessages((prev) => prev.filter((m) => m.id !== tempId))
     } finally {
       setUploading(false)
     }
@@ -947,6 +958,42 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
           </div>
         )}
 
+        {/* Staged attachment preview (WhatsApp-style) — the file is
+            already uploaded; it sends only when the user hits Send. */}
+        {staged && (
+          <div className="flex items-center gap-3 flex-none mb-2 p-2 pr-3 rounded-lg border border-gray-200 bg-gray-50">
+            {(staged.mimeType || '').startsWith('image/') ? (
+              <img
+                src={staged.url}
+                alt={staged.filename}
+                className="w-14 h-14 rounded object-cover bg-white flex-shrink-0"
+              />
+            ) : (
+              <div className="w-14 h-14 rounded bg-white border border-gray-200 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-6 h-6 text-gray-400" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-gray-800 truncate">{staged.filename}</div>
+              <div className="text-xs text-gray-500">
+                {staged.size < 1024 * 1024
+                  ? `${Math.max(1, Math.round(staged.size / 1024))} KB`
+                  : `${(staged.size / (1024 * 1024)).toFixed(1)} MB`}
+                {' · ready to send'}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStaged(null)}
+              title="Remove attachment"
+              aria-label="Remove attachment"
+              className="p-1.5 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 transition flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Input Bar */}
         <div className="flex items-center gap-2 flex-none">
           {/* Hidden file input — driven by the paperclip button. Accepts a
@@ -963,9 +1010,9 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
             type="button"
             onClick={handlePickFile}
             disabled={uploading || !activeChatId}
-            title={uploading ? 'Uploading…' : 'Attach file'}
+            title={uploading ? 'Uploading…' : `Attach file — max ${MAX_ATTACHMENT_MB} MB`}
             className="p-2 rounded-full text-gray-500 hover:text-primary hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed transition"
-            aria-label="Attach file"
+            aria-label={`Attach file (max ${MAX_ATTACHMENT_MB} MB)`}
           >
             {uploading ? (
               <Loader2 className="w-5 h-5 animate-spin" />
@@ -987,11 +1034,11 @@ const ChatTab: FC<ChatTabProps> = ({ chatId: propChatId, onClose, caseId, inline
               }
             }}
             className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-            placeholder="Type a message..."
+            placeholder={staged ? 'Add a caption (optional)…' : 'Type a message...'}
           />
           <button
             onClick={send}
-            disabled={!text.trim()}
+            disabled={uploading || (!text.trim() && !staged)}
             className="px-4 py-2 bg-primary text-white rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition"
           >
             Send
